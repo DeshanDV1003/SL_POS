@@ -109,8 +109,6 @@ public class CatalogEndpointTests
     [Fact]
     public async Task CreateProduct_WithoutProductManagePermission_Returns403()
     {
-        // cashier.lfm is deliberately avoided here: AuthEndpointTests' lockout test locks that
-        // account, and tests now share one database via the "Integration" collection.
         var client = await CreateAuthenticatedClientAsync("cashier.cs"); // Cashier role has no product.manage
 
         var response = await client.PostAsJsonAsync("/api/v1/products", new CreateProductRequest

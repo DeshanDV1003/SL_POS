@@ -8,6 +8,7 @@ using UniversalPOS.Domain.Identity;
 using UniversalPOS.Domain.Inventory;
 using UniversalPOS.Domain.Organization;
 using UniversalPOS.Domain.Purchasing;
+using UniversalPOS.Domain.Sales;
 
 namespace UniversalPOS.Infrastructure.Persistence;
 
@@ -59,6 +60,12 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<PurchaseOrderLine> PurchaseOrderLines => Set<PurchaseOrderLine>();
     public DbSet<GoodsReceivedNote> GoodsReceivedNotes => Set<GoodsReceivedNote>();
     public DbSet<GoodsReceivedNoteLine> GoodsReceivedNoteLines => Set<GoodsReceivedNoteLine>();
+
+    public DbSet<SaleHeader> SaleHeaders => Set<SaleHeader>();
+    public DbSet<SaleLine> SaleLines => Set<SaleLine>();
+    public DbSet<SalePayment> SalePayments => Set<SalePayment>();
+    public DbSet<HeldBill> HeldBills => Set<HeldBill>();
+    public DbSet<HeldBillLine> HeldBillLines => Set<HeldBillLine>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -31,6 +31,12 @@ public class ConflictException : AppException
     public ConflictException(string message) : base(message) { }
 }
 
+/// <summary>Payment reconciliation/authorization failures — underpayment, non-cash overpayment, provider decline.</summary>
+public class PaymentException : AppException
+{
+    public PaymentException(string message) : base(message) { }
+}
+
 public class ValidationFailedException : AppException
 {
     public IReadOnlyDictionary<string, string[]> Errors { get; }

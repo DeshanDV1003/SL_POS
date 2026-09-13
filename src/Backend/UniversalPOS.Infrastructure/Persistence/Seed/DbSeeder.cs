@@ -203,6 +203,11 @@ public static class DbSeeder
         await AddUserAsync(db, hasher, company.Id, "admin.lfm", "Chaminda Silva", roles["Admin"], nugegodaBranch.Id);
         await AddUserAsync(db, hasher, company.Id, "manager.lfm", "Kumari Jayasuriya", roles["Manager"], nugegodaBranch.Id);
         await AddUserAsync(db, hasher, company.Id, "cashier.lfm", "Ruwan Bandara", roles["Cashier"], nugegodaBranch.Id);
+        // Reserved for the account-lockout integration test only — never used for a
+        // legitimate login in any other test, so intentionally failing it 5 times
+        // never blocks unrelated tests that share this database (see
+        // AuthEndpointTests.Login_AfterFiveFailedAttempts_LocksAccount).
+        await AddUserAsync(db, hasher, company.Id, "qa.lockouttest", "QA Lockout Test Account", roles["Cashier"], nugegodaBranch.Id);
 
         var vat = new TaxRate { CompanyId = company.Id, Name = "VAT 18%", Type = TaxType.Vat, Percentage = 18m, IsInclusive = true, EffectiveFromUtc = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), CreatedAtUtc = DateTime.UtcNow };
         var vatExempt = new TaxRate { CompanyId = company.Id, Name = "VAT Exempt (essential food)", Type = TaxType.Vat, Percentage = 0m, IsInclusive = true, EffectiveFromUtc = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), CreatedAtUtc = DateTime.UtcNow };

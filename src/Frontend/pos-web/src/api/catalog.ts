@@ -28,3 +28,7 @@ export function getProducts(search?: string): Promise<ProductSummary[]> {
 export function getCategories(): Promise<Category[]> {
   return apiFetch<Category[]>('/api/v1/categories');
 }
+
+export function findProductByBarcode(barcode: string): Promise<ProductSummary> {
+  return apiFetch<ProductSummary>(`/api/v1/products/by-barcode/${encodeURIComponent(barcode)}`);
+}

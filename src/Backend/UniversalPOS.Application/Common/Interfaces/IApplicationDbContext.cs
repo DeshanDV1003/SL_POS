@@ -7,6 +7,7 @@ using UniversalPOS.Domain.Identity;
 using UniversalPOS.Domain.Inventory;
 using UniversalPOS.Domain.Organization;
 using UniversalPOS.Domain.Purchasing;
+using UniversalPOS.Domain.Sales;
 
 namespace UniversalPOS.Application.Common.Interfaces;
 
@@ -60,6 +61,12 @@ public interface IApplicationDbContext
     DbSet<PurchaseOrderLine> PurchaseOrderLines { get; }
     DbSet<GoodsReceivedNote> GoodsReceivedNotes { get; }
     DbSet<GoodsReceivedNoteLine> GoodsReceivedNoteLines { get; }
+
+    DbSet<SaleHeader> SaleHeaders { get; }
+    DbSet<SaleLine> SaleLines { get; }
+    DbSet<SalePayment> SalePayments { get; }
+    DbSet<HeldBill> HeldBills { get; }
+    DbSet<HeldBillLine> HeldBillLines { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 

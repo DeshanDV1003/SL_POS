@@ -42,6 +42,7 @@ public class ExceptionHandlingMiddleware
             NotFoundException e => (HttpStatusCode.NotFound, e.Message, null),
             ForbiddenException e => (HttpStatusCode.Forbidden, e.Message, null),
             ConflictException e => (HttpStatusCode.Conflict, e.Message, null),
+            PaymentException e => (HttpStatusCode.BadRequest, e.Message, null),
             ValidationFailedException e => (HttpStatusCode.BadRequest, e.Message, (object?)e.Errors),
             ValidationException e => (HttpStatusCode.BadRequest, "One or more validation errors occurred.", (object?)e.Errors
                 .GroupBy(f => f.PropertyName)

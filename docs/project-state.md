@@ -1,14 +1,14 @@
 # Universal POS — Project State
 
-Last updated: 2026-09-13, after Phase 5 (partial — see Known Gaps).
+Last updated: 2026-09-13, after Phase 6 (core retail checkout).
 
 ## Current Phase
-Phase 5 (Inventory + Purchasing) core chain complete and verified end-to-end: PO ->
-Approval -> GRN receipt -> StockLedger -> StockOnHand, and a manager-approval-gated
-StockAdjustment workflow. StockTransfer, StockCount, PurchaseInvoice, and
-SupplierPayment are NOT yet built — see Known Gaps. Awaiting go-ahead for either
-finishing the remainder of Phase 5 or moving to Phase 6 (Retail POS) with the
-inventory foundation as-is.
+Phase 6 (Retail POS) core checkout is complete and verified end-to-end: barcode/search
+-> cart -> checkout -> stock deduction -> receipt, with real payment authorization
+(cash + sandboxed card), split/overpaid cash with correct change, void with stock
+restoration and an audit trail, and hold/recall. Phase 5's StockTransfer, StockCount,
+PurchaseInvoice, and SupplierPayment remain unbuilt (see Known Gaps). Awaiting
+go-ahead for the next module.
 
 ## Completed Modules
 - **Phase 0–2**: Discovery, architecture (`docs/architecture.md`), database design
@@ -52,6 +52,29 @@ inventory foundation as-is.
   System.Text.Json defaults to numeric enum values; fixed by registering
   `JsonStringEnumConverter` globally so the API accepts/returns enum names.
 
+- **Phase 6 — Retail POS (core)**: Centralized, unit-tested money math
+  (`Domain.Sales.Money`/`SaleLineCalculator`/`PaymentAllocator` — 15 unit tests
+  covering VAT-inclusive vs exclusive tax, line discounts, rounding, split payment,
+  cash overpayment/change, and the rule that a non-cash instrument can never
+  "overpay" since it can't hand back change). `ISalesService.CheckoutAsync`
+  authorizes every payment (via a real `IPaymentProvider` abstraction — a real Cash
+  provider and a deterministic `SandboxCardPaymentProvider`, never claiming a real
+  card was actually charged) BEFORE any database write, so a decline or underpayment
+  never leaves a partial sale or a stock deduction behind — verified directly, not
+  assumed. A completed sale posts real stock movements and enqueues a
+  `FiscalTransmission` row through the Phase 3 fiscal-reporting scaffold. Void
+  restores stock via a reversing ledger entry and writes the platform's first real
+  `AuditLog` row (that table had existed since Phase 3 with nothing writing to it).
+  Hold/recall for suspended carts. Frontend: a full checkout screen (barcode/name
+  search, cart with per-line quantity/discount, cash tender with change display,
+  hold/recall) plus a post-sale receipt view.
+  23 integration tests + 17 unit tests, all passing.
+
+  A third real test-isolation bug surfaced here: the account-lockout test was still
+  sacrificing `cashier.lfm`, which Phase 6's tests now needed for legitimate
+  checkouts. Fixed by seeding a dedicated `qa.lockouttest` account used by nothing
+  else, rather than reusing a "real" seeded user for a destructive test.
+
 ## Solution Layout
 ```
 UniversalPOS.slnx
@@ -93,14 +116,25 @@ a concurrency-safe sequence generator — two concurrent order creations on the 
 branch could theoretically race to the same number; a dedicated NumberSequence table
 with proper locking is the correct fix before this goes to production concurrency.
 
-**Everything after Phase 5:** Retail POS checkout (no sale/payment path exists yet —
-Product, StockOnHand, TaxRate all exist but nothing ties them together into a
-transaction), Restaurant POS/KOT/BOT/KDS, Payments, Cash management, CRM/Loyalty
-beyond the bare Customer record, Promotions, Reporting, Offline/sync, Hardware
-abstraction implementations, real fiscal/e-invoice provider, real payment gateway
-integration. AuditLog/ApprovalRequest tables exist but nothing writes to them yet.
-ProductComponent/ProductModifierGroup tables exist but nothing reads them (no checkout
-logic to expand a bundle or apply a modifier's price adjustment).
+**Within Phase 6, explicitly deferred:** price override at checkout (permission
+`sales.price.override` exists but nothing checks it — the line price always comes
+from `Product.SellingPrice`), refunds as a distinct flow from void (void is the only
+correction path so far), a promotions/coupon engine (only a flat per-line discount
+percentage exists), receipt/invoice printing and the "full tax invoice" purchaser-TIN
+mode's actual PDF/print output (the `InvoiceMode`/purchaser fields exist on
+`SaleHeader` and are validated, but nothing renders the mandated format yet),
+`BankTransfer`/`Digital`/`Credit` payment methods have no `IPaymentProvider`
+implementation (checkout correctly rejects them with a clear 409 rather than silently
+mishandling them). `ApprovalRequest` table still has nothing writing to it — Sale void
+uses a direct permission check, not the approval-request workflow.
+
+**Everything after Phase 6:** Restaurant POS/KOT/BOT/KDS, Cash/shift management and
+Z-reports, CRM/Loyalty beyond the bare Customer record, Reporting, Offline/sync,
+Hardware abstraction implementations, real fiscal/e-invoice provider, real payment
+gateway integration, and the Phase 5 gaps listed above (StockTransfer, StockCount,
+PurchaseInvoice, SupplierPayment). ProductComponent/ProductModifierGroup tables exist
+but nothing reads them (no checkout logic to expand a bundle or apply a modifier's
+price adjustment).
 
 ## Architecture Decisions Locked In (see docs/architecture.md for full rationale)
 - Modular monolith, not microservices.
@@ -112,7 +146,8 @@ logic to expand a bundle or apply a modifier's price adjustment).
   business logic, because Sri Lanka's e-invoicing rollout is an active 2026 program.
 
 ## Next Task
-Either (a) finish Phase 5 — StockTransfer, StockCount, PurchaseInvoice,
-SupplierPayment — or (b) proceed to Phase 6 (Retail POS: checkout, cart, discounts,
-split payment, holds/recalls) using the inventory/purchasing foundation already built.
-Ask the user which before starting.
+Ask the user which to do next: (a) finish Phase 5 (StockTransfer, StockCount,
+PurchaseInvoice, SupplierPayment), (b) round out Phase 6 gaps (price override,
+refunds, promotions engine, receipt printing), or (c) start Phase 7 (Restaurant POS:
+floors/tables, KOT/BOT, kitchen stations, KDS) using the Sale/Product/Stock foundation
+already built.

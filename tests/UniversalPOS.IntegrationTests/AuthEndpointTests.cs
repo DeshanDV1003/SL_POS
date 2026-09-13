@@ -74,7 +74,7 @@ public class AuthEndpointTests
     public async Task Login_AfterFiveFailedAttempts_LocksAccount()
     {
         var client = _factory.CreateClient();
-        const string username = "cashier.lfm"; // dedicated user so this test doesn't lock out others
+        const string username = "qa.lockouttest"; // dedicated seed user reserved for this test only
 
         for (var i = 0; i < 5; i++)
         {
