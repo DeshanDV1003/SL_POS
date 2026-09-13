@@ -39,6 +39,8 @@ public static class PermissionCodes
 
     // CRM
     public const string CustomerManage = "customer.manage";
+    public const string LoyaltyAdjust = "customer.loyalty.adjust";
+    public const string PromotionManage = "promotion.manage";
 
     // Reports
     public const string ReportsViewSales = "reports.view.sales";
@@ -83,6 +85,8 @@ public static class PermissionCodes
         (SupplierManage, "Purchasing", "Create/edit suppliers"),
         (StockAdjustmentApprove, "Inventory", "Approve a pending stock adjustment"),
         (CustomerManage, "CRM", "Create/edit customers and customer groups"),
+        (LoyaltyAdjust, "CRM", "Manually adjust a customer's loyalty point balance"),
+        (PromotionManage, "Sales", "Create/edit automatic promotions"),
         (ReportsViewSales, "Reports", "View sales reports"),
         (ReportsViewFinancial, "Reports", "View financial reports"),
         (UserManage, "Admin", "Manage users"),

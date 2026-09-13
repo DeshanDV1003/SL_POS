@@ -5,6 +5,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { CashPage } from './pages/CashPage';
 import { CheckoutPage } from './pages/CheckoutPage';
+import { CustomersPage } from './pages/CustomersPage';
 import { FloorPlanPage } from './pages/FloorPlanPage';
 import { KdsPage } from './pages/KdsPage';
 import { OrderPage } from './pages/OrderPage';
@@ -78,6 +79,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <CashPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/customers"
+            element={
+              <ProtectedRoute>
+                <CustomersPage />
               </ProtectedRoute>
             }
           />

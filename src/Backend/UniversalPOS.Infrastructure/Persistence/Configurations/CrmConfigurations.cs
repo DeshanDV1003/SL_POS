@@ -27,6 +27,31 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
             .HasForeignKey(c => c.CustomerGroupId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne<MembershipTier>()
+            .WithMany()
+            .HasForeignKey(c => c.MembershipTierId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(c => new { c.CompanyId, c.Phone });
+    }
+}
+
+public class MembershipTierConfiguration : IEntityTypeConfiguration<MembershipTier>
+{
+    public void Configure(EntityTypeBuilder<MembershipTier> builder)
+    {
+        builder.Property(t => t.Name).HasMaxLength(100).IsRequired();
+        builder.Property(t => t.PointsMultiplier).HasPrecision(5, 2);
+        builder.HasIndex(t => new { t.CompanyId, t.Name }).IsUnique();
+    }
+}
+
+public class LoyaltyTransactionConfiguration : IEntityTypeConfiguration<LoyaltyTransaction>
+{
+    public void Configure(EntityTypeBuilder<LoyaltyTransaction> builder)
+    {
+        builder.Property(t => t.ReferenceType).HasMaxLength(50);
+        builder.Property(t => t.Notes).HasMaxLength(300);
+        builder.HasIndex(t => t.CustomerId);
     }
 }

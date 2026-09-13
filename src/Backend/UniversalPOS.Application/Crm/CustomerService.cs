@@ -69,6 +69,7 @@ public class CustomerService : ICustomerService
             {
                 Id = c.Id,
                 CustomerGroupId = c.CustomerGroupId,
+                MembershipTierId = c.MembershipTierId,
                 Name = c.Name,
                 Phone = c.Phone,
                 Email = c.Email,
@@ -109,6 +110,7 @@ public class CustomerService : ICustomerService
         {
             Id = customer.Id,
             CustomerGroupId = customer.CustomerGroupId,
+            MembershipTierId = customer.MembershipTierId,
             Name = customer.Name,
             Phone = customer.Phone,
             Email = customer.Email,

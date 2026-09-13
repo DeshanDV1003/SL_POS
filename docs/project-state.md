@@ -1,13 +1,13 @@
 # Universal POS — Project State
 
-Last updated: 2026-09-13, after Phase 8 (core cash management).
+Last updated: 2026-09-13, after Phase 9 (core CRM + loyalty + promotions).
 
 ## Current Phase
-Phase 8 (Cash Management) core flow complete and verified end-to-end: open a cashier
-shift on a terminal -> take cash/card sales against it -> record cash in/out/petty
-movements -> close the shift with a correctly derived expected-cash/variance figure
--> generate a day-end (Z) report -> finalize it, after which it is locked against
-recomputation even as new sales are made that same day. Phases 5, 6, and 7 all have
+Phase 9 (CRM + Loyalty) core flow complete and verified end-to-end: a sale attached to
+a customer earns real, traceable loyalty points and can trigger an automatic
+membership-tier upgrade; a manual point adjustment requires permission and writes a
+real audit log entry; over-redemption is rejected; and an automatic promotion
+correctly out-competes a smaller manual line discount at checkout. Phases 5-8 all have
 documented gaps (see Known Gaps). Awaiting go-ahead for the next module.
 
 ## Repository
@@ -130,6 +130,25 @@ session out of auto mode.
   the same seeded terminal and the same user's "one open shift" rule. Fixed by giving
   each shift-opening test its own terminal index and, where needed, its own user.
 
+- **Phase 9 — CRM + Loyalty (core)**: LoyaltyTransaction (immutable, append-only —
+  Customer.LoyaltyPointsBalance is a derived summary updated only alongside a ledger
+  row, exactly like StockLedger/StockOnHand) and MembershipTier, auto-assigned by
+  current point balance whenever it changes (verified: a sale earning 16 points
+  correctly moved a customer from no tier into a "Gold" tier with MinimumPoints=10,
+  and manually adding 50 more points kept it there). Points earn automatically at
+  checkout when a sale is attached to a customer (1 point per LKR 100 spent, times the
+  tier's multiplier) — best-effort, not mandatory. A manual adjustment requires
+  `customer.loyalty.adjust` and writes a real AuditLog entry (verified directly in the
+  database, not just asserted through the API) — the second sensitive action in this
+  codebase to exercise that table, after Phase 6's sale void. Over-redemption is
+  rejected with 409. A basic Promotion engine (percentage or fixed-amount, scoped to
+  all products/a category/a specific product, date-ranged, priority-ordered) is
+  wired into `SalesService.CheckoutAsync`: the larger of the cashier's manual line
+  discount and the best-matching active promotion applies — never stacked — verified
+  directly that a 15% category promotion overrode a smaller 2% manual discount.
+  Frontend: a Customers page (list, create, loyalty balance/tier display).
+  37 integration tests + 17 unit tests, all passing.
+
 ## Solution Layout
 ```
 UniversalPOS.slnx
@@ -201,12 +220,19 @@ cutoff time (a sale at 12:30am would fall on the next calendar day even if the
 business considers that "still last night"), and there's no report listing/history
 endpoint (only get-by-date and finalize).
 
-**Everything after Phase 8:** CRM/Loyalty beyond the bare Customer record, a
-promotions engine, Reporting/dashboards, Offline/sync, Hardware abstraction
-implementations, real fiscal/e-invoice provider, real payment gateway integration,
-and the Phase 5/6/7 gaps listed above. ProductComponent/ProductModifierGroup tables
-exist but nothing reads them (no checkout or order logic expands a bundle or applies
-a modifier's price adjustment yet).
+**Within Phase 9, explicitly deferred:** redemption is a standalone action (deduct
+points, e.g. for a physical reward) and does NOT yet apply as a discount/payment
+within checkout — a "pay with points" flow at the register isn't built. Points expiry
+(the `Expired` transaction type exists on the enum, nothing generates one — no
+scheduled job walks old transactions). The earn rate (1 point per LKR 100) is a
+hardcoded constant, not per-company configurable. Coupon codes (a customer typing in
+a promo code) aren't modeled — only automatic, rule-matched promotions exist.
+Promotion matching does one DB query per sale line (fine at SMB cart sizes, a
+documented N+1-shaped inefficiency at large cart sizes).
+
+**Everything after Phase 9:** Reporting/dashboards, Offline/sync, Hardware
+abstraction implementations, real fiscal/e-invoice provider, real payment gateway
+integration, and the Phase 5/6/7/8 gaps listed above.
 
 ## Architecture Decisions Locked In (see docs/architecture.md for full rationale)
 - Modular monolith, not microservices.
@@ -220,7 +246,8 @@ a modifier's price adjustment yet).
 ## Next Task
 Ask the user which to do next: (a) finish Phase 5 (StockTransfer, StockCount,
 PurchaseInvoice, SupplierPayment), (b) round out Phase 6 gaps (price override,
-refunds, promotions engine, receipt printing), (c) round out Phase 7 gaps (table
-merge/split/transfer, KOT/BOT cancellation, delivery/takeaway details), (d) round out
-Phase 8 gaps (mandatory shift-to-sell, configurable business-day cutoff), or (e) start
-Phase 9 (CRM + Loyalty: points earning/redemption, membership tiers, promotions).
+refunds, receipt printing), (c) round out Phase 7 gaps (table merge/split/transfer,
+KOT/BOT cancellation, delivery/takeaway details), (d) round out Phase 8 gaps
+(mandatory shift-to-sell, configurable business-day cutoff), (e) round out Phase 9
+gaps (pay-with-points at checkout, points expiry job, coupon codes), or (f) start
+Phase 10 (Reporting: sales/inventory/finance/management reports and role dashboards).

@@ -87,3 +87,15 @@ public class HeldBillLineConfiguration : IEntityTypeConfiguration<HeldBillLine>
         builder.Property(l => l.DiscountPercentage).HasPrecision(5, 2);
     }
 }
+
+public class PromotionConfiguration : IEntityTypeConfiguration<Promotion>
+{
+    public void Configure(EntityTypeBuilder<Promotion> builder)
+    {
+        builder.Property(p => p.Name).HasMaxLength(150).IsRequired();
+        builder.Property(p => p.DiscountValue).HasPrecision(18, 2);
+        builder.Property(p => p.MinQuantity).HasPrecision(18, 3);
+
+        builder.HasIndex(p => new { p.CompanyId, p.IsActive });
+    }
+}

@@ -51,6 +51,10 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
     public DbSet<CustomerGroup> CustomerGroups => Set<CustomerGroup>();
     public DbSet<Customer> Customers => Set<Customer>();
+    public DbSet<MembershipTier> MembershipTiers => Set<MembershipTier>();
+    public DbSet<LoyaltyTransaction> LoyaltyTransactions => Set<LoyaltyTransaction>();
+
+    public DbSet<Promotion> Promotions => Set<Promotion>();
 
     public DbSet<StockLedger> StockLedgers => Set<StockLedger>();
     public DbSet<StockOnHand> StockOnHands => Set<StockOnHand>();

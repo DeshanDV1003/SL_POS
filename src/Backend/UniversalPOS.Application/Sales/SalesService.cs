@@ -3,6 +3,7 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using UniversalPOS.Application.Common.Exceptions;
 using UniversalPOS.Application.Common.Interfaces;
+using UniversalPOS.Application.Crm;
 using UniversalPOS.Application.Inventory;
 using UniversalPOS.Application.Sales.Dtos;
 using UniversalPOS.Domain.Auditing;
@@ -17,6 +18,8 @@ public class SalesService : ISalesService
     private readonly IApplicationDbContext _db;
     private readonly IStockService _stockService;
     private readonly IFiscalReportingProvider _fiscalReportingProvider;
+    private readonly IPromotionEngine _promotionEngine;
+    private readonly ILoyaltyService _loyaltyService;
     private readonly IReadOnlyDictionary<Domain.Sales.PaymentMethod, IPaymentProvider> _paymentProviders;
     private readonly IValidator<CreateSaleRequest> _saleValidator;
     private readonly IValidator<CreateHeldBillRequest> _heldBillValidator;
@@ -26,6 +29,8 @@ public class SalesService : ISalesService
         IApplicationDbContext db,
         IStockService stockService,
         IFiscalReportingProvider fiscalReportingProvider,
+        IPromotionEngine promotionEngine,
+        ILoyaltyService loyaltyService,
         IEnumerable<IPaymentProvider> paymentProviders,
         IValidator<CreateSaleRequest> saleValidator,
         IValidator<CreateHeldBillRequest> heldBillValidator,
@@ -34,6 +39,8 @@ public class SalesService : ISalesService
         _db = db;
         _stockService = stockService;
         _fiscalReportingProvider = fiscalReportingProvider;
+        _promotionEngine = promotionEngine;
+        _loyaltyService = loyaltyService;
         _paymentProviders = paymentProviders.ToDictionary(p => p.SupportedMethod);
         _saleValidator = saleValidator;
         _heldBillValidator = heldBillValidator;
@@ -117,8 +124,12 @@ public class SalesService : ISalesService
             var effectiveTaxRateId = product.TaxRateId ?? (product.CategoryId.HasValue ? categoryDefaultTax.GetValueOrDefault(product.CategoryId.Value) : null);
             TaxRate? taxRate = effectiveTaxRateId.HasValue ? taxRates.GetValueOrDefault(effectiveTaxRateId.Value) : null;
 
+            var grossAmount = Domain.Sales.Money.Round(lineRequest.Quantity * product.SellingPrice);
+            var effectiveDiscountPercentage = await _promotionEngine.GetEffectiveDiscountPercentageAsync(
+                companyId, product.Id, product.CategoryId, lineRequest.Quantity, grossAmount, lineRequest.DiscountPercentage, cancellationToken);
+
             var calc = Domain.Sales.SaleLineCalculator.Calculate(new Domain.Sales.SaleLineInput(
-                lineRequest.Quantity, product.SellingPrice, lineRequest.DiscountPercentage,
+                lineRequest.Quantity, product.SellingPrice, effectiveDiscountPercentage,
                 taxRate?.Percentage ?? 0m, taxRate?.IsInclusive ?? false));
 
             sale.Lines.Add(new SaleLine
@@ -126,7 +137,7 @@ public class SalesService : ISalesService
                 ProductId = product.Id,
                 Quantity = lineRequest.Quantity,
                 UnitPrice = product.SellingPrice,
-                DiscountPercentage = lineRequest.DiscountPercentage,
+                DiscountPercentage = effectiveDiscountPercentage,
                 TaxRatePercentage = taxRate?.Percentage ?? 0m,
                 LineDiscountAmount = calc.DiscountAmount,
                 LineTaxAmount = calc.TaxAmount,
@@ -229,6 +240,11 @@ public class SalesService : ISalesService
             });
 
             await _db.SaveChangesAsync(cancellationToken);
+
+            if (sale.CustomerId.HasValue)
+            {
+                await _loyaltyService.EarnPointsForSaleAsync(companyId, sale.CustomerId.Value, sale.Id, sale.GrandTotal, cancellationToken);
+            }
         });
 
         var dto = ToReceiptDto(sale, products);

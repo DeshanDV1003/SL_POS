@@ -22,8 +22,11 @@ public static class DependencyInjection
         services.AddScoped<ICatalogService, CatalogService>();
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<ICustomerService, CustomerService>();
+        services.AddScoped<ILoyaltyService, LoyaltyService>();
         services.AddScoped<IStockService, StockService>();
         services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
+        services.AddScoped<IPromotionEngine, PromotionEngine>();
+        services.AddScoped<IPromotionService, PromotionService>();
         services.AddScoped<ISalesService, SalesService>();
         services.AddScoped<IRestaurantService, RestaurantService>();
         services.AddScoped<ICashService, CashService>();

@@ -52,6 +52,10 @@ public interface IApplicationDbContext
 
     DbSet<CustomerGroup> CustomerGroups { get; }
     DbSet<Customer> Customers { get; }
+    DbSet<MembershipTier> MembershipTiers { get; }
+    DbSet<LoyaltyTransaction> LoyaltyTransactions { get; }
+
+    DbSet<Promotion> Promotions { get; }
 
     DbSet<StockLedger> StockLedgers { get; }
     DbSet<StockOnHand> StockOnHands { get; }
