@@ -21,9 +21,11 @@ public class SalesService : ISalesService
     private readonly IPromotionEngine _promotionEngine;
     private readonly ILoyaltyService _loyaltyService;
     private readonly IReadOnlyDictionary<Domain.Sales.PaymentMethod, IPaymentProvider> _paymentProviders;
+    private readonly ICurrentUserService _currentUser;
     private readonly IValidator<CreateSaleRequest> _saleValidator;
     private readonly IValidator<CreateHeldBillRequest> _heldBillValidator;
     private readonly IValidator<VoidSaleRequest> _voidValidator;
+    private readonly IValidator<RefundSaleRequest> _refundValidator;
 
     public SalesService(
         IApplicationDbContext db,
@@ -32,9 +34,11 @@ public class SalesService : ISalesService
         IPromotionEngine promotionEngine,
         ILoyaltyService loyaltyService,
         IEnumerable<IPaymentProvider> paymentProviders,
+        ICurrentUserService currentUser,
         IValidator<CreateSaleRequest> saleValidator,
         IValidator<CreateHeldBillRequest> heldBillValidator,
-        IValidator<VoidSaleRequest> voidValidator)
+        IValidator<VoidSaleRequest> voidValidator,
+        IValidator<RefundSaleRequest> refundValidator)
     {
         _db = db;
         _stockService = stockService;
@@ -42,9 +46,11 @@ public class SalesService : ISalesService
         _promotionEngine = promotionEngine;
         _loyaltyService = loyaltyService;
         _paymentProviders = paymentProviders.ToDictionary(p => p.SupportedMethod);
+        _currentUser = currentUser;
         _saleValidator = saleValidator;
         _heldBillValidator = heldBillValidator;
         _voidValidator = voidValidator;
+        _refundValidator = refundValidator;
     }
 
     public async Task<SaleReceiptDto> CheckoutAsync(long companyId, long branchId, long cashierUserId, CreateSaleRequest request, CancellationToken cancellationToken = default)
@@ -124,19 +130,36 @@ public class SalesService : ISalesService
             var effectiveTaxRateId = product.TaxRateId ?? (product.CategoryId.HasValue ? categoryDefaultTax.GetValueOrDefault(product.CategoryId.Value) : null);
             TaxRate? taxRate = effectiveTaxRateId.HasValue ? taxRates.GetValueOrDefault(effectiveTaxRateId.Value) : null;
 
-            var grossAmount = Domain.Sales.Money.Round(lineRequest.Quantity * product.SellingPrice);
+            var unitPrice = product.SellingPrice;
+            if (lineRequest.UnitPriceOverride.HasValue)
+            {
+                if (!_currentUser.HasPermission(Domain.Identity.PermissionCodes.SalesPriceOverride))
+                {
+                    throw new ForbiddenException("You do not have permission to override the selling price.");
+                }
+                if (product.MinSellingPrice.HasValue && lineRequest.UnitPriceOverride.Value < product.MinSellingPrice.Value)
+                {
+                    throw new ValidationFailedException(new Dictionary<string, string[]>
+                    {
+                        [$"lines[{product.Id}].unitPriceOverride"] = new[] { $"Cannot go below the minimum selling price of {product.MinSellingPrice.Value:0.00}." },
+                    });
+                }
+                unitPrice = lineRequest.UnitPriceOverride.Value;
+            }
+
+            var grossAmount = Domain.Sales.Money.Round(lineRequest.Quantity * unitPrice);
             var effectiveDiscountPercentage = await _promotionEngine.GetEffectiveDiscountPercentageAsync(
                 companyId, product.Id, product.CategoryId, lineRequest.Quantity, grossAmount, lineRequest.DiscountPercentage, cancellationToken);
 
             var calc = Domain.Sales.SaleLineCalculator.Calculate(new Domain.Sales.SaleLineInput(
-                lineRequest.Quantity, product.SellingPrice, effectiveDiscountPercentage,
+                lineRequest.Quantity, unitPrice, effectiveDiscountPercentage,
                 taxRate?.Percentage ?? 0m, taxRate?.IsInclusive ?? false));
 
             sale.Lines.Add(new SaleLine
             {
                 ProductId = product.Id,
                 Quantity = lineRequest.Quantity,
-                UnitPrice = product.SellingPrice,
+                UnitPrice = unitPrice,
                 DiscountPercentage = effectiveDiscountPercentage,
                 TaxRatePercentage = taxRate?.Percentage ?? 0m,
                 LineDiscountAmount = calc.DiscountAmount,
@@ -312,6 +335,139 @@ public class SalesService : ISalesService
         await _db.SaveChangesAsync(cancellationToken);
 
         return await BuildReceiptAsync(sale.Id, cancellationToken);
+    }
+
+    public async Task<SaleReceiptDto> RefundSaleAsync(long companyId, long branchId, long? terminalId, long userId, long originalSaleId, RefundSaleRequest request, CancellationToken cancellationToken = default)
+    {
+        await _refundValidator.ValidateAndThrowAsync(request, cancellationToken);
+
+        var original = await _db.SaleHeaders.Include(s => s.Lines)
+            .FirstOrDefaultAsync(s => s.Id == originalSaleId && s.CompanyId == companyId, cancellationToken)
+            ?? throw new NotFoundException(nameof(SaleHeader), originalSaleId);
+
+        if (original.Status != SaleStatus.Completed)
+        {
+            throw new ConflictException($"Sale {original.InvoiceNumber} is not in a refundable state ({original.Status}).");
+        }
+
+        // A sale can be refunded across multiple partial requests, but never more than
+        // was originally sold — sum whatever prior refunds already took for each product.
+        var alreadyRefunded = await _db.SaleLines
+            .Where(l => _db.SaleHeaders.Any(h => h.Id == l.SaleHeaderId && h.OriginalSaleHeaderId == originalSaleId && h.Status == SaleStatus.Refunded))
+            .GroupBy(l => l.ProductId)
+            .Select(g => new { ProductId = g.Key, Quantity = g.Sum(l => l.Quantity) })
+            .ToDictionaryAsync(x => x.ProductId, x => x.Quantity, cancellationToken);
+
+        var refund = new SaleHeader
+        {
+            CompanyId = companyId,
+            BranchId = branchId,
+            TerminalId = terminalId ?? original.TerminalId,
+            CashierUserId = userId,
+            CustomerId = original.CustomerId,
+            Status = SaleStatus.Refunded,
+            OriginalSaleHeaderId = original.Id,
+            RefundReason = request.Reason,
+            CreatedAtUtc = DateTime.UtcNow,
+            CompletedAtUtc = DateTime.UtcNow,
+        };
+
+        decimal subTotal = 0, discountTotal = 0, taxTotal = 0, lineTotalsSum = 0;
+
+        foreach (var lineRequest in request.Lines)
+        {
+            var originalLine = original.Lines.FirstOrDefault(l => l.ProductId == lineRequest.ProductId)
+                ?? throw new ValidationFailedException(new Dictionary<string, string[]>
+                {
+                    ["lines"] = new[] { $"Product {lineRequest.ProductId} was not part of the original sale." },
+                });
+
+            var refundedSoFar = alreadyRefunded.GetValueOrDefault(lineRequest.ProductId);
+            var remaining = originalLine.Quantity - refundedSoFar;
+            if (lineRequest.Quantity > remaining)
+            {
+                throw new ConflictException($"Cannot refund {lineRequest.Quantity} of product {lineRequest.ProductId}; only {remaining} remains refundable.");
+            }
+
+            // Prorate the ORIGINAL line's already-computed discount/tax/total by the
+            // fraction of the line being refunded, rather than recomputing from
+            // scratch — that reflects exactly what the customer was actually charged
+            // (today's price/promotion/tax settings may have since changed) and
+            // sidesteps needing to know whether the original tax was inclusive or
+            // exclusive, since LineTotal/LineDiscountAmount/LineTaxAmount already
+            // bake that in.
+            var proportion = lineRequest.Quantity / originalLine.Quantity;
+            var grossAmount = Domain.Sales.Money.Round(originalLine.Quantity * originalLine.UnitPrice * proportion);
+            var discountAmount = Domain.Sales.Money.Round(originalLine.LineDiscountAmount * proportion);
+            var taxAmount = Domain.Sales.Money.Round(originalLine.LineTaxAmount * proportion);
+            var lineTotal = Domain.Sales.Money.Round(originalLine.LineTotal * proportion);
+
+            refund.Lines.Add(new SaleLine
+            {
+                ProductId = lineRequest.ProductId,
+                Quantity = lineRequest.Quantity,
+                UnitPrice = originalLine.UnitPrice,
+                DiscountPercentage = originalLine.DiscountPercentage,
+                TaxRatePercentage = originalLine.TaxRatePercentage,
+                LineDiscountAmount = discountAmount,
+                LineTaxAmount = taxAmount,
+                LineTotal = lineTotal,
+            });
+
+            subTotal += grossAmount;
+            discountTotal += discountAmount;
+            taxTotal += taxAmount;
+            lineTotalsSum += lineTotal;
+        }
+
+        refund.SubTotal = subTotal;
+        refund.DiscountTotal = discountTotal;
+        refund.TaxTotal = taxTotal;
+        refund.GrandTotal = Domain.Sales.Money.Round(lineTotalsSum);
+
+        var paymentsTotal = Domain.Sales.Money.Round(request.Payments.Sum(p => p.Amount));
+        if (paymentsTotal != refund.GrandTotal)
+        {
+            throw new PaymentException($"Refund payments total {paymentsTotal:0.00} but the refund amount is {refund.GrandTotal:0.00}.");
+        }
+
+        foreach (var payment in request.Payments)
+        {
+            refund.Payments.Add(new SalePayment { Method = payment.Method, Amount = payment.Amount, ProviderStatus = "Refunded" });
+        }
+
+        var sequence = await _db.SaleHeaders.CountAsync(s => s.BranchId == branchId && s.Status == SaleStatus.Refunded, cancellationToken) + 1;
+        refund.InvoiceNumber = $"CN-{branchId}-{sequence:D6}";
+
+        await _db.ExecuteInTransactionAsync(async () =>
+        {
+            _db.SaleHeaders.Add(refund);
+            await _db.SaveChangesAsync(cancellationToken);
+
+            foreach (var line in refund.Lines)
+            {
+                await _stockService.PostMovementAsync(
+                    companyId, branchId, line.ProductId, StockMovementType.SaleReturn, line.Quantity,
+                    nameof(SaleHeader), refund.Id, userId, cancellationToken);
+            }
+
+            _db.AuditLogs.Add(new AuditLog
+            {
+                CompanyId = companyId,
+                BranchId = branchId,
+                TerminalId = terminalId,
+                UserId = userId,
+                ActionCode = "Sale.Refund",
+                EntityType = nameof(SaleHeader),
+                EntityId = original.Id.ToString(),
+                NewValueJson = JsonSerializer.Serialize(new { RefundSaleHeaderId = refund.Id, refund.GrandTotal, request.Reason }),
+                CreatedAtUtc = DateTime.UtcNow,
+            });
+
+            await _db.SaveChangesAsync(cancellationToken);
+        });
+
+        return await BuildReceiptAsync(refund.Id, cancellationToken);
     }
 
     public async Task<HeldBillDto> HoldAsync(long companyId, long branchId, long cashierUserId, CreateHeldBillRequest request, CancellationToken cancellationToken = default)

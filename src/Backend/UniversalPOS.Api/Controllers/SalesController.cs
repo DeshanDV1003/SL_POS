@@ -15,11 +15,13 @@ namespace UniversalPOS.Api.Controllers;
 public class SalesController : ControllerBase
 {
     private readonly ISalesService _salesService;
+    private readonly IReceiptRenderer _receiptRenderer;
     private readonly ICurrentUserService _currentUser;
 
-    public SalesController(ISalesService salesService, ICurrentUserService currentUser)
+    public SalesController(ISalesService salesService, IReceiptRenderer receiptRenderer, ICurrentUserService currentUser)
     {
         _salesService = salesService;
+        _receiptRenderer = receiptRenderer;
         _currentUser = currentUser;
     }
 
@@ -34,6 +36,14 @@ public class SalesController : ControllerBase
     public async Task<IActionResult> GetSale(long branchId, long saleId, CancellationToken cancellationToken)
     {
         return Ok(await _salesService.GetSaleAsync(_currentUser.CompanyId, saleId, cancellationToken));
+    }
+
+    [HttpGet("{saleId:long}/receipt")]
+    [RequirePermission(PermissionCodes.SalesReprint)]
+    public async Task<IActionResult> GetReceipt(long branchId, long saleId, CancellationToken cancellationToken)
+    {
+        var text = await _receiptRenderer.RenderAsync(_currentUser.CompanyId, saleId, cancellationToken);
+        return Content(text, "text/plain");
     }
 
     [HttpPost]
@@ -52,6 +62,15 @@ public class SalesController : ControllerBase
         var userId = RequireUserId();
         var result = await _salesService.VoidSaleAsync(_currentUser.CompanyId, branchId, _currentUser.TerminalId, userId, saleId, request, cancellationToken);
         return Ok(result);
+    }
+
+    [HttpPost("{saleId:long}/refund")]
+    [RequirePermission(PermissionCodes.SalesRefund)]
+    public async Task<IActionResult> Refund(long branchId, long saleId, [FromBody] RefundSaleRequest request, CancellationToken cancellationToken)
+    {
+        var userId = RequireUserId();
+        var result = await _salesService.RefundSaleAsync(_currentUser.CompanyId, branchId, _currentUser.TerminalId, userId, saleId, request, cancellationToken);
+        return CreatedAtAction(nameof(GetSale), new { branchId, saleId = result.Id }, result);
     }
 
     [HttpGet("held")]

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { findProductByBarcode, getProducts, type ProductSummary } from '../api/catalog';
 import { getTerminals } from '../api/organization';
-import { checkout, deleteHeldBill, getHeldBills, holdBill, recallBill, type HeldBillDto, type SaleReceipt } from '../api/sales';
+import { checkout, deleteHeldBill, getHeldBills, getReceiptText, holdBill, recallBill, type HeldBillDto, type SaleReceipt } from '../api/sales';
 import { useAuth } from '../context/AuthContext';
 
 const currency = new Intl.NumberFormat('en-LK', { style: 'currency', currency: 'LKR' });
@@ -25,6 +25,7 @@ export function CheckoutPage() {
   const [error, setError] = useState<string | null>(null);
   const [cashTendered, setCashTendered] = useState('');
   const [receipt, setReceipt] = useState<SaleReceipt | null>(null);
+  const [printedReceipt, setPrintedReceipt] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [heldBills, setHeldBills] = useState<HeldBillDto[]>([]);
   const scanInputRef = useRef<HTMLInputElement>(null);
@@ -110,6 +111,16 @@ export function CheckoutPage() {
     }
   }
 
+  async function handleViewReceipt() {
+    if (!branchId || !receipt) return;
+    try {
+      const text = await getReceiptText(branchId, receipt.id);
+      setPrintedReceipt(text);
+    } catch {
+      setError('Could not load the receipt.');
+    }
+  }
+
   async function handleHold() {
     if (!branchId || !terminalId || cart.length === 0) return;
     try {
@@ -161,7 +172,15 @@ export function CheckoutPage() {
           <div className="receipt-line"><span>Tax</span><span>{currency.format(receipt.taxTotal)}</span></div>
           <div className="receipt-line receipt-total"><span>Total</span><span>{currency.format(receipt.grandTotal)}</span></div>
           <div className="receipt-line"><span>Change Due</span><span>{currency.format(receipt.changeDue)}</span></div>
-          <button onClick={() => setReceipt(null)} className="checkout-button">New Sale</button>
+          {printedReceipt ? (
+            <pre className="printed-receipt">{printedReceipt}</pre>
+          ) : (
+            <button onClick={handleViewReceipt} className="hold-button">View / Print Receipt</button>
+          )}
+          {printedReceipt && (
+            <button onClick={() => window.print()} className="hold-button">Print</button>
+          )}
+          <button onClick={() => { setReceipt(null); setPrintedReceipt(null); }} className="checkout-button">New Sale</button>
         </div>
       </div>
     );

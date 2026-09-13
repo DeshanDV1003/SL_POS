@@ -7,6 +7,9 @@ public class CreateSaleLineRequest
     public long ProductId { get; set; }
     public decimal Quantity { get; set; }
     public decimal DiscountPercentage { get; set; }
+
+    /// <summary>Requires sales.price.override; also cannot go below Product.MinSellingPrice regardless of permission.</summary>
+    public decimal? UnitPriceOverride { get; set; }
 }
 
 public class CreateSalePaymentRequest
@@ -83,4 +86,19 @@ public class HeldBillDto
 public class VoidSaleRequest
 {
     public string Reason { get; set; } = string.Empty;
+}
+
+public class RefundLineRequest
+{
+    public long ProductId { get; set; }
+    public decimal Quantity { get; set; }
+}
+
+public class RefundSaleRequest
+{
+    public string Reason { get; set; } = string.Empty;
+    public List<RefundLineRequest> Lines { get; set; } = new();
+
+    /// <summary>How the refund is being paid out (e.g. Cash). No provider authorization is performed — this records the outflow, it doesn't "charge" anything.</summary>
+    public List<CreateSalePaymentRequest> Payments { get; set; } = new();
 }

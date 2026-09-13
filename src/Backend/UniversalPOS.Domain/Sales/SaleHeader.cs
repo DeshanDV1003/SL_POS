@@ -57,6 +57,15 @@ public class SaleHeader
     public long? VoidedSaleHeaderId { get; set; }
     public string? VoidReason { get; set; }
 
+    /// <summary>
+    /// Set on a Refunded SaleHeader (a distinct new document, never a mutation of the
+    /// original) pointing back to the sale it partially or fully refunds. The original
+    /// sale's own Status stays Completed — a refund records that money and stock went
+    /// back, it doesn't erase that the sale happened.
+    /// </summary>
+    public long? OriginalSaleHeaderId { get; set; }
+    public string? RefundReason { get; set; }
+
     public ICollection<SaleLine> Lines { get; set; } = new List<SaleLine>();
     public ICollection<SalePayment> Payments { get; set; } = new List<SalePayment>();
 }

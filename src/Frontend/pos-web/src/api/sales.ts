@@ -1,9 +1,10 @@
-import { apiFetch } from './client';
+import { apiFetch, apiFetchText } from './client';
 
 export interface SaleLineRequest {
   productId: number;
   quantity: number;
   discountPercentage: number;
+  unitPriceOverride?: number;
 }
 
 export interface SalePaymentRequest {
@@ -76,4 +77,8 @@ export function recallBill(branchId: number, heldBillId: number): Promise<HeldBi
 
 export function deleteHeldBill(branchId: number, heldBillId: number): Promise<void> {
   return apiFetch<void>(`/api/v1/branches/${branchId}/sales/held/${heldBillId}`, { method: 'DELETE' });
+}
+
+export function getReceiptText(branchId: number, saleId: number): Promise<string> {
+  return apiFetchText(`/api/v1/branches/${branchId}/sales/${saleId}/receipt`);
 }

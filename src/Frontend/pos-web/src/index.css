@@ -328,6 +328,17 @@ body {
   padding-top: 0.6rem;
 }
 
+.printed-receipt {
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  background: var(--color-bg);
+  border: 1px dashed var(--color-border);
+  border-radius: 6px;
+  padding: 1rem;
+  margin: 1rem 0;
+}
+
 @media (max-width: 800px) {
   .pos-screen {
     grid-template-columns: 1fr;

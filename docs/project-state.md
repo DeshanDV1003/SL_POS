@@ -1,18 +1,17 @@
 # Universal POS — Project State
 
-Last updated: 2026-09-13, after rounding out Phase 5's gaps (StockTransfer,
-StockCount, PurchaseInvoice, SupplierPayment).
+Last updated: 2026-09-13, after rounding out Phase 6's gaps (price override,
+refunds, receipt/tax-invoice rendering).
 
 ## Current Phase
-Phase 5 is now functionally complete: branch-to-branch stock transfer (Requested ->
-Sent -> Received, stock leaves the source only on Send and arrives at the
-destination only on Receive), physical stock count reconciliation (a discrepancy
-between the system snapshot and what's physically counted posts a real correcting
-ledger entry, never silently absorbed), and supplier invoice/payment tracking
-(partial payments, status transitions Unpaid -> PartiallyPaid -> Paid, overpayment
-rejected) are all built and verified end-to-end. Phases 6-10 still have documented
-gaps (see Known Gaps). Awaiting go-ahead for the next round of gap-filling or the
-next new phase.
+Phase 6 is now functionally complete: checkout supports a permission-gated price
+override (with a hard MinSellingPrice floor that not even the override permission can
+cross), a refund is a genuinely distinct document from a void (partial-quantity
+refunds, cross-refund over-quantity tracking, payment-total matching, the original
+sale never mutated), and receipts render as real formatted text in both a simplified
+mode and the IRD-mandated full-tax-invoice mode. Phases 5, 7, 8, 9, 10 all have
+documented gaps (see Known Gaps). Awaiting go-ahead for the next round of
+gap-filling or the next new phase.
 
 ## Repository
 This project is now connected to a GitHub remote: `origin` ->
@@ -188,6 +187,24 @@ session out of auto mode.
   UI given the session's remaining scope) — the API is real and tested, but there is
   no UI for it yet.
 
+- **Phase 6 gap-fill — price override, refunds, receipt rendering**: A line's
+  `unitPriceOverride` requires `sales.price.override` (verified: a cashier without it
+  gets 403, an admin with it can sell below list price) and can never go below
+  `Product.MinSellingPrice` regardless of who's asking — a hard floor, not a
+  permission-gated one. `RefundSaleAsync` creates a genuinely distinct new SaleHeader
+  (Status=Refunded, a "CN-" credit-note number) rather than mutating the original —
+  verified directly: refunding 1 of 3 units restored exactly 1 unit of stock and left
+  the original sale untouched at Status=Completed. Refund quantity is tracked against
+  everything already refunded for that sale (not just the original quantity), so a
+  second refund attempt for an already-fully-refunded line is correctly rejected
+  (409); the refund's payment lines must sum to exactly the refund amount (400 if
+  not) — no "change" concept applies to money going back out. `IReceiptRenderer`
+  produces real formatted text for both a simplified receipt and (verified via a
+  purchaser-TIN/name/address round-trip) the mandated full-tax-invoice layout,
+  exposed at `GET /branches/{id}/sales/{id}/receipt`. Frontend: a "View/Print Receipt"
+  button on the post-sale screen that fetches and displays the real rendered text.
+  55 integration tests + 17 unit tests, all passing.
+
 ## Solution Layout
 ```
 UniversalPOS.slnx
@@ -231,17 +248,17 @@ have their own display numbers yet — only a database Id). No frontend UI exist
 for stock transfer, stock count, or supplier invoicing/payment — they are real,
 tested APIs without a screen.
 
-**Within Phase 6, explicitly deferred:** price override at checkout (permission
-`sales.price.override` exists but nothing checks it — the line price always comes
-from `Product.SellingPrice`), refunds as a distinct flow from void (void is the only
-correction path so far), a promotions/coupon engine (only a flat per-line discount
-percentage exists), receipt/invoice printing and the "full tax invoice" purchaser-TIN
-mode's actual PDF/print output (the `InvoiceMode`/purchaser fields exist on
-`SaleHeader` and are validated, but nothing renders the mandated format yet),
-`BankTransfer`/`Digital`/`Credit` payment methods have no `IPaymentProvider`
-implementation (checkout correctly rejects them with a clear 409 rather than silently
-mishandling them). `ApprovalRequest` table still has nothing writing to it — Sale void
-uses a direct permission check, not the approval-request workflow.
+**Within Phase 6, still remaining after the gap-fill:** a coupon engine (customer-
+entered codes; the automatic Promotion engine from Phase 9 is unrelated and already
+built), PDF rendering of the receipt (it's real formatted plain text sized for an
+80mm thermal printer, not a PDF/HTML document — appropriate for the hardware target,
+but there's no "email a PDF invoice" path), `BankTransfer`/`Digital`/`Credit` payment
+methods still have no `IPaymentProvider` implementation (checkout correctly rejects
+them with a clear 409 rather than silently mishandling them), and a refund still
+requires the exact original line's product to be looked up by ProductId — a fully
+custom refund line (e.g. issuing store credit unrelated to any original line) isn't
+supported. `ApprovalRequest` table still has nothing writing to it — Sale
+void/refund use direct permission checks, not the approval-request workflow.
 
 **Within Phase 7, explicitly deferred:** table merge/split/transfer (TableSession
 exists as a 1:1 with an Order; the "relink Order<->Table" mechanism the architecture
@@ -294,10 +311,9 @@ real fiscal/e-invoice provider, real payment gateway integration, and the Phase
   business logic, because Sri Lanka's e-invoicing rollout is an active 2026 program.
 
 ## Next Task
-Phase 5 gap-fill is done. Ask the user which to do next: (a) round out Phase 6 gaps
-(price override, refunds, receipt printing), (b) round out Phase 7 gaps (table
-merge/split/transfer, KOT/BOT cancellation, delivery/takeaway details), (c) round out
-Phase 8 gaps (mandatory shift-to-sell, configurable business-day cutoff), (d) round
-out Phase 9 gaps (pay-with-points at checkout, points expiry job, coupon codes), (e)
-round out Phase 10 gaps (trend charts, exports, kitchen-performance reports), or (f)
-start Phase 11 (Offline + Synchronization).
+Phase 5 and Phase 6 gap-fills are done. Ask the user which to do next: (a) round out
+Phase 7 gaps (table merge/split/transfer, KOT/BOT cancellation, delivery/takeaway
+details), (b) round out Phase 8 gaps (mandatory shift-to-sell, configurable
+business-day cutoff), (c) round out Phase 9 gaps (pay-with-points at checkout, points
+expiry job, coupon codes), (d) round out Phase 10 gaps (trend charts, exports,
+kitchen-performance reports), or (e) start Phase 11 (Offline + Synchronization).

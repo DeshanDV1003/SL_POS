@@ -43,3 +43,21 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
   return data as T;
 }
+
+/** For endpoints that return plain text (e.g. a formatted receipt), not JSON. */
+export async function apiFetchText(path: string): Promise<string> {
+  const token = getAccessToken();
+  const headers = new Headers();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const response = await fetch(path, { headers });
+  const text = await response.text();
+
+  if (!response.ok) {
+    throw new ApiError(response.status, null, `Request to ${path} failed with ${response.status}`);
+  }
+
+  return text;
+}

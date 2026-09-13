@@ -29,6 +29,7 @@ public static class DependencyInjection
         services.AddScoped<IPromotionEngine, PromotionEngine>();
         services.AddScoped<IPromotionService, PromotionService>();
         services.AddScoped<ISalesService, SalesService>();
+        services.AddScoped<IReceiptRenderer, ReceiptRenderer>();
         services.AddScoped<IRestaurantService, RestaurantService>();
         services.AddScoped<ICashService, CashService>();
         services.AddScoped<IReportingService, ReportingService>();

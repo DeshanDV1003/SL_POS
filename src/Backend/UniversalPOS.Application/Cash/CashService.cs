@@ -157,6 +157,13 @@ public class CashService : ICashService
                 && s.CompletedAtUtc >= dayStart && s.CompletedAtUtc < dayEnd)
             .ToListAsync(cancellationToken);
 
+        // RefundTotal covers both a full void (the sale itself is reversed) and a real
+        // Refunded credit-note sale (a distinct document — see SalesService.RefundSaleAsync).
+        var refundedSales = await _db.SaleHeaders
+            .Where(s => s.CompanyId == companyId && s.BranchId == branchId && s.Status == SaleStatus.Refunded
+                && s.CompletedAtUtc >= dayStart && s.CompletedAtUtc < dayEnd)
+            .ToListAsync(cancellationToken);
+
         var saleIds = completedSales.Select(s => s.Id).ToList();
         var payments = await _db.SalePayments.Where(p => saleIds.Contains(p.SaleHeaderId)).ToListAsync(cancellationToken);
 
@@ -167,7 +174,7 @@ public class CashService : ICashService
         report.TaxTotal = completedSales.Sum(s => s.TaxTotal);
         report.ServiceChargeTotal = completedSales.Sum(s => s.ServiceChargeTotal);
         report.NetSales = completedSales.Sum(s => s.GrandTotal);
-        report.RefundTotal = voidedSales.Sum(s => s.GrandTotal);
+        report.RefundTotal = voidedSales.Sum(s => s.GrandTotal) + refundedSales.Sum(s => s.GrandTotal);
         report.CashSalesTotal = payments.Where(p => p.Method == PaymentMethod.Cash).Sum(p => p.Amount);
         report.CardSalesTotal = payments.Where(p => p.Method == PaymentMethod.Card).Sum(p => p.Amount);
         report.OtherPaymentTotal = payments.Where(p => p.Method is not PaymentMethod.Cash and not PaymentMethod.Card).Sum(p => p.Amount);
