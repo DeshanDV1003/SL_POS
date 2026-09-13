@@ -12,6 +12,9 @@ dist/
 .vs/
 .vscode/
 
+## Claude Code session-local state (not project code)
+.claude/
+
 ## Logs
 *.log
 
