@@ -58,7 +58,8 @@ public static class DbSeeder
                 Domain.Identity.PermissionCodes.ReportsViewFinancial, Domain.Identity.PermissionCodes.TableManage,
                 Domain.Identity.PermissionCodes.KotCancel, Domain.Identity.PermissionCodes.AuditView,
                 Domain.Identity.PermissionCodes.TaxRateManage, Domain.Identity.PermissionCodes.SupplierManage,
-                Domain.Identity.PermissionCodes.CustomerManage,
+                Domain.Identity.PermissionCodes.CustomerManage, Domain.Identity.PermissionCodes.StockAdjustmentApprove,
+                Domain.Identity.PermissionCodes.GoodsReceiptCreate,
             },
             ["Cashier"] = new[]
             {

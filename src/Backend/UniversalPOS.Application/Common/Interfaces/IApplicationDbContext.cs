@@ -4,6 +4,7 @@ using UniversalPOS.Domain.Catalog;
 using UniversalPOS.Domain.Crm;
 using UniversalPOS.Domain.Fiscal;
 using UniversalPOS.Domain.Identity;
+using UniversalPOS.Domain.Inventory;
 using UniversalPOS.Domain.Organization;
 using UniversalPOS.Domain.Purchasing;
 
@@ -49,5 +50,26 @@ public interface IApplicationDbContext
     DbSet<CustomerGroup> CustomerGroups { get; }
     DbSet<Customer> Customers { get; }
 
+    DbSet<StockLedger> StockLedgers { get; }
+    DbSet<StockOnHand> StockOnHands { get; }
+    DbSet<ProductBatch> ProductBatches { get; }
+    DbSet<StockAdjustment> StockAdjustments { get; }
+    DbSet<StockAdjustmentLine> StockAdjustmentLines { get; }
+
+    DbSet<PurchaseOrder> PurchaseOrders { get; }
+    DbSet<PurchaseOrderLine> PurchaseOrderLines { get; }
+    DbSet<GoodsReceivedNote> GoodsReceivedNotes { get; }
+    DbSet<GoodsReceivedNoteLine> GoodsReceivedNoteLines { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Runs <paramref name="operation"/> inside a database transaction (with the
+    /// provider's retry-on-transient-failure strategy applied around the whole thing),
+    /// so a multi-step business operation that needs more than one SaveChangesAsync
+    /// call — e.g. saving a GRN to get its generated Id, then posting stock lines that
+    /// reference it — commits or rolls back as a single unit rather than leaving the
+    /// database in a partially-applied state if a later step fails.
+    /// </summary>
+    Task ExecuteInTransactionAsync(Func<Task> operation, CancellationToken cancellationToken = default);
 }

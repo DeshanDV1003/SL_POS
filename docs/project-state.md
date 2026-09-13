@@ -1,10 +1,14 @@
 # Universal POS — Project State
 
-Last updated: 2026-09-13, after Phase 4.
+Last updated: 2026-09-13, after Phase 5 (partial — see Known Gaps).
 
 ## Current Phase
-Phase 4 (Master Data) complete and verified end-to-end. Awaiting go-ahead for Phase 5
-(Inventory + Purchasing: stock ledger, transfers, adjustments, PO -> GRN -> invoice).
+Phase 5 (Inventory + Purchasing) core chain complete and verified end-to-end: PO ->
+Approval -> GRN receipt -> StockLedger -> StockOnHand, and a manager-approval-gated
+StockAdjustment workflow. StockTransfer, StockCount, PurchaseInvoice, and
+SupplierPayment are NOT yet built — see Known Gaps. Awaiting go-ahead for either
+finishing the remainder of Phase 5 or moving to Phase 6 (Retail POS) with the
+inventory foundation as-is.
 
 ## Completed Modules
 - **Phase 0–2**: Discovery, architecture (`docs/architecture.md`), database design
@@ -25,7 +29,28 @@ Phase 4 (Master Data) complete and verified end-to-end. Awaiting go-ahead for Ph
   2026). Real business-rule validation (SKU/barcode/name uniqueness -> 409, price/stock
   sanity checks -> 400) verified via curl against the live API, not just unit tests.
   Product Catalog frontend page with live search.
-  14 integration tests + 2 unit tests, all passing.
+- **Phase 5 — Inventory + Purchasing (core, partial)**: Immutable StockLedger +
+  transactionally-maintained StockOnHand summary (`IStockService.PostMovementAsync`,
+  never a bare quantity update), ProductBatch (created automatically on receipt for
+  TrackBatches/TrackExpiry products), StockAdjustment with a real manager-approval
+  workflow (a requester cannot approve their own adjustment; already-resolved
+  adjustments reject a second approval), PurchaseOrder -> GoodsReceivedNote flow that
+  posts real stock movements inside one DB transaction spanning two SaveChanges calls
+  (`IApplicationDbContext.ExecuteInTransactionAsync`). Verified end-to-end via curl:
+  PO created -> approved -> GRN received -> StockLedger row appears -> StockOnHand
+  updates; adjustment created by a manager, self-approval correctly blocked with 403,
+  admin approval correctly applies the delta, double-approval correctly blocked with
+  409. Frontend: a Stock On Hand page.
+  17 integration tests + 2 unit tests, all passing.
+
+  Two real bugs found and fixed via this phase's testing (not caught by compiling):
+  (1) `JwtBearerOptions` was silently remapping the `sub` claim to a legacy
+  `ClaimTypes.NameIdentifier` URI, so `ICurrentUserService.UserId` always returned
+  null — invisible until a feature (this phase) first needed UserId rather than just
+  CompanyId. Fixed with `options.MapInboundClaims = false`. (2) Enums sent as JSON
+  request bodies (e.g. `StockAdjustmentReason`) failed to deserialize because
+  System.Text.Json defaults to numeric enum values; fixed by registering
+  `JsonStringEnumConverter` globally so the API accepts/returns enum names.
 
 ## Solution Layout
 ```
@@ -59,17 +84,23 @@ docs/
   company-selector and relax this back to per-Company).
 
 ## Known Gaps / Not Yet Implemented
-Everything outside Foundation + Master Data: Inventory (stock ledger, transfers,
-adjustments — Product exists but has no stock quantity or movement history yet),
-Purchasing workflow (PO -> GRN -> invoice; Supplier exists but no purchase documents),
-Retail POS, Restaurant POS/KOT/BOT/KDS, Payments, Cash management, CRM/Loyalty beyond
-the Customer record itself, Promotions, Reporting, Offline/sync, Hardware abstraction
-implementations, real fiscal/e-invoice provider, real payment gateway integration.
-AuditLog/ApprovalRequest tables exist but nothing writes to them yet — the first
-sensitive action built (e.g. a discount or void in Phase 6) must wire up real audit
-writes, not treat the table as decorative. ProductComponent/ProductModifierGroup
-tables exist but nothing reads them yet (no checkout logic exists to expand a bundle
-or apply a modifier's price adjustment).
+**Within Phase 5, explicitly deferred (not fake — simply not built yet):**
+StockTransfer (branch-to-branch), StockCount (physical count reconciliation),
+PurchaseInvoice and SupplierPayment (the purchasing module currently stops at GRN —
+there is no supplier billing/payment tracking yet), purchase returns. The
+PurchaseOrder numbering scheme (`PO-{branchId}-{count+1:D6}`) is a simple counter, not
+a concurrency-safe sequence generator — two concurrent order creations on the same
+branch could theoretically race to the same number; a dedicated NumberSequence table
+with proper locking is the correct fix before this goes to production concurrency.
+
+**Everything after Phase 5:** Retail POS checkout (no sale/payment path exists yet —
+Product, StockOnHand, TaxRate all exist but nothing ties them together into a
+transaction), Restaurant POS/KOT/BOT/KDS, Payments, Cash management, CRM/Loyalty
+beyond the bare Customer record, Promotions, Reporting, Offline/sync, Hardware
+abstraction implementations, real fiscal/e-invoice provider, real payment gateway
+integration. AuditLog/ApprovalRequest tables exist but nothing writes to them yet.
+ProductComponent/ProductModifierGroup tables exist but nothing reads them (no checkout
+logic to expand a bundle or apply a modifier's price adjustment).
 
 ## Architecture Decisions Locked In (see docs/architecture.md for full rationale)
 - Modular monolith, not microservices.
@@ -81,8 +112,7 @@ or apply a modifier's price adjustment).
   business logic, because Sri Lanka's e-invoicing rollout is an active 2026 program.
 
 ## Next Task
-Phase 5 — Inventory + Purchasing: StockLedger (immutable movement log), StockOnHand
-summary, ProductBatch, StockTransfer, StockAdjustment, StockCount, and the
-PurchaseOrder -> GoodsReceivedNote -> PurchaseInvoice -> SupplierPayment workflow,
-following the same real-schema-then-migration-then-API-then-tests discipline as
-Phases 3-4.
+Either (a) finish Phase 5 — StockTransfer, StockCount, PurchaseInvoice,
+SupplierPayment — or (b) proceed to Phase 6 (Retail POS: checkout, cart, discounts,
+split payment, holds/recalls) using the inventory/purchasing foundation already built.
+Ask the user which before starting.

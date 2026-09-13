@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using UniversalPOS.Application.Catalog;
 using UniversalPOS.Application.Crm;
 using UniversalPOS.Application.Identity;
+using UniversalPOS.Application.Inventory;
 using UniversalPOS.Application.Organization;
 using UniversalPOS.Application.Purchasing;
 
@@ -18,6 +19,8 @@ public static class DependencyInjection
         services.AddScoped<ICatalogService, CatalogService>();
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<ICustomerService, CustomerService>();
+        services.AddScoped<IStockService, StockService>();
+        services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
         return services;
     }
 }

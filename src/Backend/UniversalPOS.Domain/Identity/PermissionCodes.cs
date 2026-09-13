@@ -31,7 +31,9 @@ public static class PermissionCodes
     // Purchasing
     public const string PurchaseOrderCreate = "purchase.order.create";
     public const string PurchaseOrderApprove = "purchase.order.approve";
+    public const string GoodsReceiptCreate = "purchase.grn.receive";
     public const string SupplierManage = "supplier.manage";
+    public const string StockAdjustmentApprove = "inventory.adjust.approve";
 
     // CRM
     public const string CustomerManage = "customer.manage";
@@ -70,7 +72,9 @@ public static class PermissionCodes
         (TaxRateManage, "Catalog", "Create/edit tax rates"),
         (PurchaseOrderCreate, "Purchasing", "Create a purchase order"),
         (PurchaseOrderApprove, "Purchasing", "Approve a purchase order"),
+        (GoodsReceiptCreate, "Purchasing", "Record goods received from a supplier"),
         (SupplierManage, "Purchasing", "Create/edit suppliers"),
+        (StockAdjustmentApprove, "Inventory", "Approve a pending stock adjustment"),
         (CustomerManage, "CRM", "Create/edit customers and customer groups"),
         (ReportsViewSales, "Reports", "View sales reports"),
         (ReportsViewFinancial, "Reports", "View financial reports"),

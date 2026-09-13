@@ -1,0 +1,262 @@
+using FluentValidation;
+using Microsoft.EntityFrameworkCore;
+using UniversalPOS.Application.Common.Exceptions;
+using UniversalPOS.Application.Common.Interfaces;
+using UniversalPOS.Application.Inventory;
+using UniversalPOS.Application.Purchasing.Dtos;
+using UniversalPOS.Domain.Inventory;
+using UniversalPOS.Domain.Purchasing;
+
+namespace UniversalPOS.Application.Purchasing;
+
+public class PurchaseOrderService : IPurchaseOrderService
+{
+    private readonly IApplicationDbContext _db;
+    private readonly IStockService _stockService;
+    private readonly IValidator<CreatePurchaseOrderRequest> _createValidator;
+    private readonly IValidator<ReceiveGoodsRequest> _receiveValidator;
+
+    public PurchaseOrderService(
+        IApplicationDbContext db,
+        IStockService stockService,
+        IValidator<CreatePurchaseOrderRequest> createValidator,
+        IValidator<ReceiveGoodsRequest> receiveValidator)
+    {
+        _db = db;
+        _stockService = stockService;
+        _createValidator = createValidator;
+        _receiveValidator = receiveValidator;
+    }
+
+    public async Task<PurchaseOrderDto> CreateAsync(long companyId, long branchId, long createdByUserId, CreatePurchaseOrderRequest request, CancellationToken cancellationToken = default)
+    {
+        await _createValidator.ValidateAndThrowAsync(request, cancellationToken);
+
+        if (!await _db.Suppliers.AnyAsync(s => s.Id == request.SupplierId && s.CompanyId == companyId, cancellationToken))
+        {
+            throw new NotFoundException(nameof(Domain.Purchasing.Supplier), request.SupplierId);
+        }
+
+        var sequence = await _db.PurchaseOrders.CountAsync(po => po.BranchId == branchId, cancellationToken) + 1;
+        var orderNumber = $"PO-{branchId}-{sequence:D6}";
+
+        var order = new PurchaseOrder
+        {
+            CompanyId = companyId,
+            BranchId = branchId,
+            SupplierId = request.SupplierId,
+            OrderNumber = orderNumber,
+            Status = PurchaseOrderStatus.Submitted,
+            CreatedByUserId = createdByUserId,
+            OrderDate = DateTime.UtcNow,
+            ExpectedDate = request.ExpectedDate,
+            Notes = request.Notes,
+        };
+
+        foreach (var line in request.Lines)
+        {
+            order.Lines.Add(new PurchaseOrderLine { ProductId = line.ProductId, QuantityOrdered = line.Quantity, UnitCost = line.UnitCost });
+        }
+
+        _db.PurchaseOrders.Add(order);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return ToDto(order);
+    }
+
+    public async Task<PurchaseOrderDto> ApproveAsync(long companyId, long purchaseOrderId, long approvedByUserId, CancellationToken cancellationToken = default)
+    {
+        var order = await _db.PurchaseOrders
+            .Include(po => po.Lines)
+            .FirstOrDefaultAsync(po => po.Id == purchaseOrderId && po.CompanyId == companyId, cancellationToken);
+
+        if (order is null)
+        {
+            throw new NotFoundException(nameof(PurchaseOrder), purchaseOrderId);
+        }
+
+        if (order.Status != PurchaseOrderStatus.Submitted)
+        {
+            throw new ConflictException($"Purchase order {order.OrderNumber} is not awaiting approval.");
+        }
+
+        order.Status = PurchaseOrderStatus.Approved;
+        order.ApprovedByUserId = approvedByUserId;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return ToDto(order);
+    }
+
+    public async Task<IReadOnlyList<PurchaseOrderDto>> GetAsync(long companyId, long branchId, CancellationToken cancellationToken = default)
+    {
+        var orders = await _db.PurchaseOrders
+            .Include(po => po.Lines)
+            .Where(po => po.CompanyId == companyId && po.BranchId == branchId)
+            .OrderByDescending(po => po.OrderDate)
+            .ToListAsync(cancellationToken);
+
+        return orders.Select(ToDto).ToList();
+    }
+
+    public async Task<GoodsReceivedNoteDto> ReceiveGoodsAsync(long companyId, long branchId, long receivedByUserId, ReceiveGoodsRequest request, CancellationToken cancellationToken = default)
+    {
+        await _receiveValidator.ValidateAndThrowAsync(request, cancellationToken);
+
+        if (!await _db.Suppliers.AnyAsync(s => s.Id == request.SupplierId && s.CompanyId == companyId, cancellationToken))
+        {
+            throw new NotFoundException(nameof(Domain.Purchasing.Supplier), request.SupplierId);
+        }
+
+        PurchaseOrder? purchaseOrder = null;
+        if (request.PurchaseOrderId.HasValue)
+        {
+            purchaseOrder = await _db.PurchaseOrders
+                .Include(po => po.Lines)
+                .FirstOrDefaultAsync(po => po.Id == request.PurchaseOrderId.Value && po.CompanyId == companyId, cancellationToken);
+
+            if (purchaseOrder is null)
+            {
+                throw new NotFoundException(nameof(PurchaseOrder), request.PurchaseOrderId.Value);
+            }
+        }
+
+        var sequence = await _db.GoodsReceivedNotes.CountAsync(g => g.BranchId == branchId, cancellationToken) + 1;
+        var grn = new GoodsReceivedNote
+        {
+            CompanyId = companyId,
+            BranchId = branchId,
+            SupplierId = request.SupplierId,
+            PurchaseOrderId = request.PurchaseOrderId,
+            GrnNumber = $"GRN-{branchId}-{sequence:D6}",
+            ReceivedDate = DateTime.UtcNow,
+            ReceivedByUserId = receivedByUserId,
+        };
+
+        var products = await _db.Products
+            .Where(p => p.CompanyId == companyId && request.Lines.Select(l => l.ProductId).Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, cancellationToken);
+
+        foreach (var line in request.Lines)
+        {
+            if (!products.TryGetValue(line.ProductId, out var product))
+            {
+                throw new NotFoundException("Product", line.ProductId);
+            }
+
+            var poLine = purchaseOrder?.Lines.FirstOrDefault(l => l.ProductId == line.ProductId);
+
+            grn.Lines.Add(new GoodsReceivedNoteLine
+            {
+                PurchaseOrderLineId = poLine?.Id,
+                ProductId = line.ProductId,
+                QuantityReceived = line.QuantityReceived,
+                UnitCost = line.UnitCost,
+                BatchNumber = line.BatchNumber,
+                ExpiryDate = line.ExpiryDate,
+            });
+
+            if (poLine is not null)
+            {
+                poLine.QuantityReceived += line.QuantityReceived;
+            }
+
+            if (product.TrackBatches || product.TrackExpiry)
+            {
+                _db.ProductBatches.Add(new ProductBatch
+                {
+                    CompanyId = companyId,
+                    BranchId = branchId,
+                    ProductId = product.Id,
+                    BatchNumber = line.BatchNumber ?? $"AUTO-{DateTime.UtcNow:yyyyMMddHHmmss}",
+                    ExpiryDate = line.ExpiryDate,
+                    ReceivedDate = DateTime.UtcNow,
+                    QuantityReceived = line.QuantityReceived,
+                    QuantityRemaining = line.QuantityReceived,
+                });
+            }
+        }
+
+        _db.GoodsReceivedNotes.Add(grn);
+
+        // Two SaveChangesAsync calls are needed: the ledger's ReferenceId must be the
+        // GRN's real (database-generated) Id, which only exists after the first save.
+        // Both are wrapped in one transaction so a failure posting stock rolls back the
+        // GRN too, rather than leaving a GRN on record with no matching stock movement.
+        await _db.ExecuteInTransactionAsync(async () =>
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+
+            foreach (var line in request.Lines)
+            {
+                await _stockService.PostMovementAsync(
+                    companyId, branchId, line.ProductId, StockMovementType.Purchase, line.QuantityReceived,
+                    nameof(GoodsReceivedNote), grn.Id, receivedByUserId, cancellationToken);
+            }
+
+            if (purchaseOrder is not null && purchaseOrder.Lines.All(l => l.QuantityReceived >= l.QuantityOrdered))
+            {
+                purchaseOrder.Status = PurchaseOrderStatus.Received;
+            }
+            else if (purchaseOrder is not null)
+            {
+                purchaseOrder.Status = PurchaseOrderStatus.PartiallyReceived;
+            }
+
+            await _db.SaveChangesAsync(cancellationToken);
+        });
+
+        return new GoodsReceivedNoteDto
+        {
+            Id = grn.Id,
+            GrnNumber = grn.GrnNumber,
+            SupplierId = grn.SupplierId,
+            PurchaseOrderId = grn.PurchaseOrderId,
+            ReceivedDate = grn.ReceivedDate,
+            Lines = request.Lines,
+        };
+    }
+
+    public async Task<IReadOnlyList<GoodsReceivedNoteDto>> GetGoodsReceivedNotesAsync(long companyId, long branchId, CancellationToken cancellationToken = default)
+    {
+        var notes = await _db.GoodsReceivedNotes
+            .Include(g => g.Lines)
+            .Where(g => g.CompanyId == companyId && g.BranchId == branchId)
+            .OrderByDescending(g => g.ReceivedDate)
+            .ToListAsync(cancellationToken);
+
+        return notes.Select(g => new GoodsReceivedNoteDto
+        {
+            Id = g.Id,
+            GrnNumber = g.GrnNumber,
+            SupplierId = g.SupplierId,
+            PurchaseOrderId = g.PurchaseOrderId,
+            ReceivedDate = g.ReceivedDate,
+            Lines = g.Lines.Select(l => new ReceiveGoodsLineRequest
+            {
+                PurchaseOrderLineId = l.PurchaseOrderLineId,
+                ProductId = l.ProductId,
+                QuantityReceived = l.QuantityReceived,
+                UnitCost = l.UnitCost,
+                BatchNumber = l.BatchNumber,
+                ExpiryDate = l.ExpiryDate,
+            }).ToList(),
+        }).ToList();
+    }
+
+    private static PurchaseOrderDto ToDto(PurchaseOrder order) => new()
+    {
+        Id = order.Id,
+        OrderNumber = order.OrderNumber,
+        SupplierId = order.SupplierId,
+        Status = order.Status.ToString(),
+        OrderDate = order.OrderDate,
+        ExpectedDate = order.ExpectedDate,
+        Lines = order.Lines.Select(l => new PurchaseOrderLineDto
+        {
+            ProductId = l.ProductId,
+            QuantityOrdered = l.QuantityOrdered,
+            QuantityReceived = l.QuantityReceived,
+            UnitCost = l.UnitCost,
+        }).ToList(),
+    };
+}
