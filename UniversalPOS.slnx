@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Backend/">
+    <Project Path="src/Backend/UniversalPOS.Api/UniversalPOS.Api.csproj" />
+    <Project Path="src/Backend/UniversalPOS.Application/UniversalPOS.Application.csproj" />
+    <Project Path="src/Backend/UniversalPOS.Domain/UniversalPOS.Domain.csproj" />
+    <Project Path="src/Backend/UniversalPOS.Infrastructure/UniversalPOS.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/UniversalPOS.Domain.Tests/UniversalPOS.Domain.Tests.csproj" />
+    <Project Path="tests/UniversalPOS.IntegrationTests/UniversalPOS.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

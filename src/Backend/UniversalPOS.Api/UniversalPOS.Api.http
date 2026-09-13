@@ -1,0 +1,6 @@
+@UniversalPOS.Api_HostAddress = http://localhost:5276
+
+GET {{UniversalPOS.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
