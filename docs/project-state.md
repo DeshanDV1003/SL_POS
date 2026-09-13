@@ -1,10 +1,10 @@
 # Universal POS — Project State
 
-Last updated: 2026-09-13, after Phase 3.
+Last updated: 2026-09-13, after Phase 4.
 
 ## Current Phase
-Phase 3 (Foundation) complete and verified end-to-end. Awaiting go-ahead for Phase 4
-(Master Data: products, categories, suppliers, customers, tax).
+Phase 4 (Master Data) complete and verified end-to-end. Awaiting go-ahead for Phase 5
+(Inventory + Purchasing: stock ledger, transfers, adjustments, PO -> GRN -> invoice).
 
 ## Completed Modules
 - **Phase 0–2**: Discovery, architecture (`docs/architecture.md`), database design
@@ -16,7 +16,16 @@ Phase 3 (Foundation) complete and verified end-to-end. Awaiting go-ahead for Pha
   wired to any write path — no sensitive actions exist yet to audit), FiscalTransmission
   scaffold + no-op `IFiscalReportingProvider`. Backend (.NET 8) and frontend (React 18 +
   TS + Vite) both real and verified against a live SQL Server LocalDB instance, not
-  mocked. 7 integration tests + 2 unit tests, all passing.
+  mocked.
+- **Phase 4 — Master Data**: Category (self-referencing)/Brand/Unit(with base-unit
+  conversion)/TaxRate(VAT vs SCL modeled separately), Product with multi-barcode,
+  variants, composite/bundle components, and modifier groups (schema in place; checkout
+  logic comes in Phase 6), Supplier/SupplierProduct, Customer/CustomerGroup (Customer
+  captures TaxRegistrationNo for the mandatory full-tax-invoice purchaser TIN due 1 Jul
+  2026). Real business-rule validation (SKU/barcode/name uniqueness -> 409, price/stock
+  sanity checks -> 400) verified via curl against the live API, not just unit tests.
+  Product Catalog frontend page with live search.
+  14 integration tests + 2 unit tests, all passing.
 
 ## Solution Layout
 ```
@@ -50,12 +59,17 @@ docs/
   company-selector and relax this back to per-Company).
 
 ## Known Gaps / Not Yet Implemented
-Everything outside Foundation: Catalog, Inventory, Purchasing, Retail POS, Restaurant
-POS/KOT/BOT/KDS, Payments, Cash management, CRM/Loyalty, Promotions, Reporting,
-Offline/sync, Hardware abstraction implementations, real fiscal/e-invoice provider,
-real payment gateway integration. AuditLog/ApprovalRequest tables exist but nothing
-writes to them yet — the first sensitive action built (e.g. a discount or void in
-Phase 6) must wire up real audit writes, not treat the table as decorative.
+Everything outside Foundation + Master Data: Inventory (stock ledger, transfers,
+adjustments — Product exists but has no stock quantity or movement history yet),
+Purchasing workflow (PO -> GRN -> invoice; Supplier exists but no purchase documents),
+Retail POS, Restaurant POS/KOT/BOT/KDS, Payments, Cash management, CRM/Loyalty beyond
+the Customer record itself, Promotions, Reporting, Offline/sync, Hardware abstraction
+implementations, real fiscal/e-invoice provider, real payment gateway integration.
+AuditLog/ApprovalRequest tables exist but nothing writes to them yet — the first
+sensitive action built (e.g. a discount or void in Phase 6) must wire up real audit
+writes, not treat the table as decorative. ProductComponent/ProductModifierGroup
+tables exist but nothing reads them yet (no checkout logic exists to expand a bundle
+or apply a modifier's price adjustment).
 
 ## Architecture Decisions Locked In (see docs/architecture.md for full rationale)
 - Modular monolith, not microservices.
@@ -67,6 +81,8 @@ Phase 6) must wire up real audit writes, not treat the table as decorative.
   business logic, because Sri Lanka's e-invoicing rollout is an active 2026 program.
 
 ## Next Task
-Phase 4 — Master Data: Product/Category/Brand/Unit catalog, Supplier, Customer,
-TaxRate/ProductTax, following the same real-schema-then-migration-then-API-then-tests
-discipline as Phase 3.
+Phase 5 — Inventory + Purchasing: StockLedger (immutable movement log), StockOnHand
+summary, ProductBatch, StockTransfer, StockAdjustment, StockCount, and the
+PurchaseOrder -> GoodsReceivedNote -> PurchaseInvoice -> SupplierPayment workflow,
+following the same real-schema-then-migration-then-API-then-tests discipline as
+Phases 3-4.
