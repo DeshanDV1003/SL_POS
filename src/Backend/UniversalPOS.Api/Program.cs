@@ -6,6 +6,7 @@ using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using UniversalPOS.Api.Authorization;
 using UniversalPOS.Api.Middleware;
+using UniversalPOS.Api.Services;
 using UniversalPOS.Application;
 using UniversalPOS.Application.Common.Interfaces;
 using UniversalPOS.Infrastructure;
@@ -46,6 +47,8 @@ builder.Services.AddSwaggerGen(c =>
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 var jwtSection = builder.Configuration.GetSection(JwtOptions.SectionName);
 var jwtSigningKey = jwtSection["SigningKey"]!;

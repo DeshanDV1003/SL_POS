@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using FluentValidation;
 using UniversalPOS.Application.Common.Exceptions;
 
 namespace UniversalPOS.Api.Middleware;
@@ -40,7 +41,11 @@ public class ExceptionHandlingMiddleware
             AccountLockedOutException e => (HttpStatusCode.Locked, e.Message, null),
             NotFoundException e => (HttpStatusCode.NotFound, e.Message, null),
             ForbiddenException e => (HttpStatusCode.Forbidden, e.Message, null),
+            ConflictException e => (HttpStatusCode.Conflict, e.Message, null),
             ValidationFailedException e => (HttpStatusCode.BadRequest, e.Message, (object?)e.Errors),
+            ValidationException e => (HttpStatusCode.BadRequest, "One or more validation errors occurred.", (object?)e.Errors
+                .GroupBy(f => f.PropertyName)
+                .ToDictionary(g => g.Key, g => g.Select(f => f.ErrorMessage).ToArray())),
             _ => (HttpStatusCode.InternalServerError, "An unexpected error occurred.", null),
         };
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getBranches, getCompanies } from '../api/organization';
 import type { Branch, Company } from '../api/types';
 import { useAuth } from '../context/AuthContext';
@@ -34,7 +35,10 @@ export function DashboardPage() {
             Signed in as <strong>{session.user.fullName}</strong> ({session.user.roles.join(', ')})
           </p>
         </div>
-        <button onClick={() => logout()}>Sign out</button>
+        <div className="header-actions">
+          <Link to="/products" className="nav-link">Product Catalog</Link>
+          <button onClick={() => logout()}>Sign out</button>
+        </div>
       </header>
 
       {loadError && <div className="error-banner">{loadError}</div>}

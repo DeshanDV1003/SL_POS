@@ -26,6 +26,11 @@ public class ForbiddenException : AppException
     public ForbiddenException(string message) : base(message) { }
 }
 
+public class ConflictException : AppException
+{
+    public ConflictException(string message) : base(message) { }
+}
+
 public class ValidationFailedException : AppException
 {
     public IReadOnlyDictionary<string, string[]> Errors { get; }

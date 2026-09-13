@@ -26,10 +26,15 @@ public static class PermissionCodes
 
     // Products / catalog
     public const string ProductManage = "product.manage";
+    public const string TaxRateManage = "tax.rate.manage";
 
     // Purchasing
     public const string PurchaseOrderCreate = "purchase.order.create";
     public const string PurchaseOrderApprove = "purchase.order.approve";
+    public const string SupplierManage = "supplier.manage";
+
+    // CRM
+    public const string CustomerManage = "customer.manage";
 
     // Reports
     public const string ReportsViewSales = "reports.view.sales";
@@ -61,9 +66,12 @@ public static class PermissionCodes
         (InventoryAdjust, "Inventory", "Post a stock adjustment"),
         (InventoryTransfer, "Inventory", "Create/approve a stock transfer"),
         (InventoryCount, "Inventory", "Perform a stock count"),
-        (ProductManage, "Catalog", "Create/edit products and pricing"),
+        (ProductManage, "Catalog", "Create/edit products, categories, brands, and units"),
+        (TaxRateManage, "Catalog", "Create/edit tax rates"),
         (PurchaseOrderCreate, "Purchasing", "Create a purchase order"),
         (PurchaseOrderApprove, "Purchasing", "Approve a purchase order"),
+        (SupplierManage, "Purchasing", "Create/edit suppliers"),
+        (CustomerManage, "CRM", "Create/edit customers and customer groups"),
         (ReportsViewSales, "Reports", "View sales reports"),
         (ReportsViewFinancial, "Reports", "View financial reports"),
         (UserManage, "Admin", "Manage users"),

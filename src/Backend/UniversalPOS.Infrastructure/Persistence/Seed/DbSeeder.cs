@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using UniversalPOS.Application.Common.Interfaces;
+using UniversalPOS.Domain.Catalog;
 using UniversalPOS.Domain.Identity;
 using UniversalPOS.Domain.Organization;
 
@@ -56,6 +57,8 @@ public static class DbSeeder
                 Domain.Identity.PermissionCodes.PurchaseOrderApprove, Domain.Identity.PermissionCodes.ReportsViewSales,
                 Domain.Identity.PermissionCodes.ReportsViewFinancial, Domain.Identity.PermissionCodes.TableManage,
                 Domain.Identity.PermissionCodes.KotCancel, Domain.Identity.PermissionCodes.AuditView,
+                Domain.Identity.PermissionCodes.TaxRateManage, Domain.Identity.PermissionCodes.SupplierManage,
+                Domain.Identity.PermissionCodes.CustomerManage,
             },
             ["Cashier"] = new[]
             {
@@ -72,7 +75,7 @@ public static class DbSeeder
         foreach (var (roleName, permissionCodes) in roleDefinitions)
         {
             var role = await db.Roles.Include(r => r.RolePermissions)
-                .SingleOrDefaultAsync(r => r.CompanyId == null && r.Name == roleName);
+                .FirstOrDefaultAsync(r => r.CompanyId == null && r.Name == roleName);
 
             if (role is null)
             {
@@ -141,6 +144,26 @@ public static class DbSeeder
         await AddUserAsync(db, hasher, company.Id, "manager.cs", "Shanika Fernando", roles["Manager"], colomboBranch.Id);
         await AddUserAsync(db, hasher, company.Id, "cashier.cs", "Dilani Wickramasinghe", roles["Cashier"], colomboBranch.Id);
         await AddUserAsync(db, hasher, company.Id, "kitchen.cs", "Sunil Rathnayake", roles["KitchenStaff"], colomboBranch.Id);
+
+        var vat = new TaxRate { CompanyId = company.Id, Name = "VAT 18%", Type = TaxType.Vat, Percentage = 18m, IsInclusive = true, EffectiveFromUtc = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), CreatedAtUtc = DateTime.UtcNow };
+        db.TaxRates.Add(vat);
+
+        var portion = new Domain.Catalog.Unit { CompanyId = company.Id, Name = "Portion", Abbreviation = "pc", ConversionFactor = 1m, CreatedAtUtc = DateTime.UtcNow };
+        db.Units.Add(portion);
+        await db.SaveChangesAsync();
+
+        var riceAndCurry = new Category { CompanyId = company.Id, Name = "Rice & Curry", DefaultTaxRateId = vat.Id, CreatedAtUtc = DateTime.UtcNow };
+        var shortEats = new Category { CompanyId = company.Id, Name = "Short Eats & Kottu", DefaultTaxRateId = vat.Id, CreatedAtUtc = DateTime.UtcNow };
+        var beverages = new Category { CompanyId = company.Id, Name = "Beverages", DefaultTaxRateId = vat.Id, CreatedAtUtc = DateTime.UtcNow };
+        db.Categories.AddRange(riceAndCurry, shortEats, beverages);
+        await db.SaveChangesAsync();
+
+        db.Products.AddRange(
+            new Product { CompanyId = company.Id, CategoryId = riceAndCurry.Id, UnitId = portion.Id, Sku = "CS-RC-001", Name = "Chicken Rice & Curry", CostPrice = 380m, SellingPrice = 750m, ReorderLevel = 0, MinStock = 0, MaxStock = 0, CreatedAtUtc = DateTime.UtcNow },
+            new Product { CompanyId = company.Id, CategoryId = riceAndCurry.Id, UnitId = portion.Id, Sku = "CS-RC-002", Name = "Vegetable Rice & Curry", CostPrice = 220m, SellingPrice = 500m, ReorderLevel = 0, MinStock = 0, MaxStock = 0, CreatedAtUtc = DateTime.UtcNow },
+            new Product { CompanyId = company.Id, CategoryId = shortEats.Id, UnitId = portion.Id, Sku = "CS-SE-001", Name = "Chicken Kottu", CostPrice = 420m, SellingPrice = 850m, ReorderLevel = 0, MinStock = 0, MaxStock = 0, CreatedAtUtc = DateTime.UtcNow },
+            new Product { CompanyId = company.Id, CategoryId = beverages.Id, UnitId = portion.Id, Sku = "CS-BV-001", Name = "King Coconut", CostPrice = 80m, SellingPrice = 200m, ReorderLevel = 0, MinStock = 0, MaxStock = 0, CreatedAtUtc = DateTime.UtcNow });
+        await db.SaveChangesAsync();
     }
 
     private static async Task SeedSupermarketCompanyAsync(ApplicationDbContext db, IPasswordHasher hasher, Dictionary<string, Role> roles)
@@ -179,6 +202,33 @@ public static class DbSeeder
         await AddUserAsync(db, hasher, company.Id, "admin.lfm", "Chaminda Silva", roles["Admin"], nugegodaBranch.Id);
         await AddUserAsync(db, hasher, company.Id, "manager.lfm", "Kumari Jayasuriya", roles["Manager"], nugegodaBranch.Id);
         await AddUserAsync(db, hasher, company.Id, "cashier.lfm", "Ruwan Bandara", roles["Cashier"], nugegodaBranch.Id);
+
+        var vat = new TaxRate { CompanyId = company.Id, Name = "VAT 18%", Type = TaxType.Vat, Percentage = 18m, IsInclusive = true, EffectiveFromUtc = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), CreatedAtUtc = DateTime.UtcNow };
+        var vatExempt = new TaxRate { CompanyId = company.Id, Name = "VAT Exempt (essential food)", Type = TaxType.Vat, Percentage = 0m, IsInclusive = true, EffectiveFromUtc = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), CreatedAtUtc = DateTime.UtcNow };
+        db.TaxRates.AddRange(vat, vatExempt);
+
+        var each = new Domain.Catalog.Unit { CompanyId = company.Id, Name = "Each", Abbreviation = "ea", ConversionFactor = 1m, CreatedAtUtc = DateTime.UtcNow };
+        var kilogram = new Domain.Catalog.Unit { CompanyId = company.Id, Name = "Kilogram", Abbreviation = "kg", ConversionFactor = 1m, CreatedAtUtc = DateTime.UtcNow };
+        db.Units.AddRange(each, kilogram);
+        await db.SaveChangesAsync();
+
+        var groceries = new Category { CompanyId = company.Id, Name = "Groceries", DefaultTaxRateId = vatExempt.Id, CreatedAtUtc = DateTime.UtcNow };
+        var dairy = new Category { CompanyId = company.Id, Name = "Dairy", DefaultTaxRateId = vat.Id, CreatedAtUtc = DateTime.UtcNow };
+        var beverages = new Category { CompanyId = company.Id, Name = "Beverages", DefaultTaxRateId = vat.Id, CreatedAtUtc = DateTime.UtcNow };
+        db.Categories.AddRange(groceries, dairy, beverages);
+        await db.SaveChangesAsync();
+
+        var rice = new Product { CompanyId = company.Id, CategoryId = groceries.Id, UnitId = kilogram.Id, Sku = "LFM-GR-001", Name = "Basmathi Rice 5kg", CostPrice = 1450m, SellingPrice = 1690m, ReorderLevel = 20, MinStock = 10, MaxStock = 200, CreatedAtUtc = DateTime.UtcNow };
+        rice.Barcodes.Add(new ProductBarcode { Barcode = "4791234500019", IsPrimary = true });
+
+        var milk = new Product { CompanyId = company.Id, CategoryId = dairy.Id, UnitId = each.Id, Sku = "LFM-DY-001", Name = "Full Cream Milk Powder 400g", CostPrice = 780m, SellingPrice = 895m, ReorderLevel = 30, MinStock = 15, MaxStock = 300, TrackExpiry = true, CreatedAtUtc = DateTime.UtcNow };
+        milk.Barcodes.Add(new ProductBarcode { Barcode = "4791234500026", IsPrimary = true });
+
+        var cola = new Product { CompanyId = company.Id, CategoryId = beverages.Id, UnitId = each.Id, Sku = "LFM-BV-001", Name = "Cola 1.5L Bottle", CostPrice = 210m, SellingPrice = 280m, ReorderLevel = 40, MinStock = 20, MaxStock = 400, CreatedAtUtc = DateTime.UtcNow };
+        cola.Barcodes.Add(new ProductBarcode { Barcode = "4791234500033", IsPrimary = true });
+
+        db.Products.AddRange(rice, milk, cola);
+        await db.SaveChangesAsync();
     }
 
     private static async Task AddUserAsync(

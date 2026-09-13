@@ -11,7 +11,8 @@ namespace UniversalPOS.IntegrationTests;
 /// and the real seed data — no mocks. Verifies the login/authorization contract that
 /// the rest of the platform depends on.
 /// </summary>
-public class AuthEndpointTests : IClassFixture<CustomWebApplicationFactory>
+[Collection("Integration")]
+public class AuthEndpointTests
 {
     private readonly CustomWebApplicationFactory _factory;
 

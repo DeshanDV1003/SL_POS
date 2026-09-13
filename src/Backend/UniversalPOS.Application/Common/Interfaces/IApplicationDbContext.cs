@@ -1,8 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using UniversalPOS.Domain.Auditing;
+using UniversalPOS.Domain.Catalog;
+using UniversalPOS.Domain.Crm;
 using UniversalPOS.Domain.Fiscal;
 using UniversalPOS.Domain.Identity;
 using UniversalPOS.Domain.Organization;
+using UniversalPOS.Domain.Purchasing;
 
 namespace UniversalPOS.Application.Common.Interfaces;
 
@@ -28,6 +31,23 @@ public interface IApplicationDbContext
     DbSet<ApprovalRequest> ApprovalRequests { get; }
 
     DbSet<FiscalTransmission> FiscalTransmissions { get; }
+
+    DbSet<Category> Categories { get; }
+    DbSet<Brand> Brands { get; }
+    DbSet<Domain.Catalog.Unit> Units { get; }
+    DbSet<TaxRate> TaxRates { get; }
+    DbSet<Product> Products { get; }
+    DbSet<ProductBarcode> ProductBarcodes { get; }
+    DbSet<ProductVariant> ProductVariants { get; }
+    DbSet<ProductComponent> ProductComponents { get; }
+    DbSet<ProductModifierGroup> ProductModifierGroups { get; }
+    DbSet<ProductModifier> ProductModifiers { get; }
+
+    DbSet<Supplier> Suppliers { get; }
+    DbSet<SupplierProduct> SupplierProducts { get; }
+
+    DbSet<CustomerGroup> CustomerGroups { get; }
+    DbSet<Customer> Customers { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
