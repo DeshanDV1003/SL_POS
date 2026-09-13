@@ -64,6 +64,7 @@ public static class DbSeeder
                 Domain.Identity.PermissionCodes.OrderBill, Domain.Identity.PermissionCodes.KdsUpdate,
                 Domain.Identity.PermissionCodes.CashShiftOpen, Domain.Identity.PermissionCodes.DayEndReportFinalize,
                 Domain.Identity.PermissionCodes.LoyaltyAdjust, Domain.Identity.PermissionCodes.PromotionManage,
+                Domain.Identity.PermissionCodes.PurchaseInvoiceCreate, Domain.Identity.PermissionCodes.SupplierPaymentCreate,
             },
             ["Cashier"] = new[]
             {

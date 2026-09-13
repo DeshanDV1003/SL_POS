@@ -32,3 +32,22 @@ public class ReceiveGoodsRequestValidator : AbstractValidator<ReceiveGoodsReques
         });
     }
 }
+
+public class CreatePurchaseInvoiceRequestValidator : AbstractValidator<UniversalPOS.Application.Purchasing.Dtos.CreatePurchaseInvoiceRequest>
+{
+    public CreatePurchaseInvoiceRequestValidator()
+    {
+        RuleFor(x => x.SupplierId).GreaterThan(0);
+        RuleFor(x => x.SupplierInvoiceNumber).NotEmpty().MaximumLength(50);
+        RuleFor(x => x.SubTotal).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.TaxTotal).GreaterThanOrEqualTo(0);
+    }
+}
+
+public class RecordSupplierPaymentRequestValidator : AbstractValidator<UniversalPOS.Application.Purchasing.Dtos.RecordSupplierPaymentRequest>
+{
+    public RecordSupplierPaymentRequestValidator()
+    {
+        RuleFor(x => x.Amount).GreaterThan(0);
+    }
+}

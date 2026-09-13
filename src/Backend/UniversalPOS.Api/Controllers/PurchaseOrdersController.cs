@@ -61,4 +61,25 @@ public class PurchaseOrdersController : ControllerBase
         var result = await _purchaseOrderService.ReceiveGoodsAsync(_currentUser.CompanyId, branchId, userId, request, cancellationToken);
         return CreatedAtAction(nameof(GetGoodsReceivedNotes), new { branchId }, result);
     }
+
+    [HttpGet("~/api/v1/branches/{branchId:long}/purchase-invoices")]
+    public async Task<IActionResult> GetInvoices(long branchId, CancellationToken cancellationToken)
+        => Ok(await _purchaseOrderService.GetInvoicesAsync(_currentUser.CompanyId, branchId, cancellationToken));
+
+    [HttpPost("~/api/v1/branches/{branchId:long}/purchase-invoices")]
+    [RequirePermission(PermissionCodes.PurchaseInvoiceCreate)]
+    public async Task<IActionResult> CreateInvoice(long branchId, [FromBody] CreatePurchaseInvoiceRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _purchaseOrderService.CreateInvoiceAsync(_currentUser.CompanyId, branchId, request, cancellationToken);
+        return CreatedAtAction(nameof(GetInvoices), new { branchId }, result);
+    }
+
+    [HttpPost("~/api/v1/branches/{branchId:long}/purchase-invoices/{invoiceId:long}/payments")]
+    [RequirePermission(PermissionCodes.SupplierPaymentCreate)]
+    public async Task<IActionResult> RecordPayment(long branchId, long invoiceId, [FromBody] RecordSupplierPaymentRequest request, CancellationToken cancellationToken)
+    {
+        var userId = _currentUser.UserId ?? throw new ForbiddenException("No authenticated user context.");
+        var result = await _purchaseOrderService.RecordPaymentAsync(_currentUser.CompanyId, invoiceId, userId, request, cancellationToken);
+        return Ok(result);
+    }
 }

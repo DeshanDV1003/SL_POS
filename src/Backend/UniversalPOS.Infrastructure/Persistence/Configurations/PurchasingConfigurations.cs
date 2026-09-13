@@ -83,3 +83,28 @@ public class GoodsReceivedNoteLineConfiguration : IEntityTypeConfiguration<Goods
         builder.Property(l => l.BatchNumber).HasMaxLength(50);
     }
 }
+
+public class PurchaseInvoiceConfiguration : IEntityTypeConfiguration<PurchaseInvoice>
+{
+    public void Configure(EntityTypeBuilder<PurchaseInvoice> builder)
+    {
+        builder.Property(i => i.SupplierInvoiceNumber).HasMaxLength(50).IsRequired();
+        builder.Property(i => i.SubTotal).HasPrecision(18, 2);
+        builder.Property(i => i.TaxTotal).HasPrecision(18, 2);
+        builder.Property(i => i.GrandTotal).HasPrecision(18, 2);
+        builder.Property(i => i.AmountPaid).HasPrecision(18, 2);
+
+        builder.HasIndex(i => new { i.SupplierId, i.SupplierInvoiceNumber });
+    }
+}
+
+public class SupplierPaymentConfiguration : IEntityTypeConfiguration<SupplierPayment>
+{
+    public void Configure(EntityTypeBuilder<SupplierPayment> builder)
+    {
+        builder.Property(p => p.Amount).HasPrecision(18, 2);
+        builder.Property(p => p.ReferenceNo).HasMaxLength(100);
+
+        builder.HasIndex(p => p.PurchaseInvoiceId);
+    }
+}

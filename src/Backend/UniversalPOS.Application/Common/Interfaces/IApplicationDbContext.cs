@@ -62,11 +62,17 @@ public interface IApplicationDbContext
     DbSet<ProductBatch> ProductBatches { get; }
     DbSet<StockAdjustment> StockAdjustments { get; }
     DbSet<StockAdjustmentLine> StockAdjustmentLines { get; }
+    DbSet<StockTransfer> StockTransfers { get; }
+    DbSet<StockTransferLine> StockTransferLines { get; }
+    DbSet<StockCount> StockCounts { get; }
+    DbSet<StockCountLine> StockCountLines { get; }
 
     DbSet<PurchaseOrder> PurchaseOrders { get; }
     DbSet<PurchaseOrderLine> PurchaseOrderLines { get; }
     DbSet<GoodsReceivedNote> GoodsReceivedNotes { get; }
     DbSet<GoodsReceivedNoteLine> GoodsReceivedNoteLines { get; }
+    DbSet<PurchaseInvoice> PurchaseInvoices { get; }
+    DbSet<SupplierPayment> SupplierPayments { get; }
 
     DbSet<SaleHeader> SaleHeaders { get; }
     DbSet<SaleLine> SaleLines { get; }

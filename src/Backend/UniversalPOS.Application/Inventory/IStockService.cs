@@ -29,4 +29,13 @@ public interface IStockService
     Task<StockAdjustmentDto> CreateAdjustmentAsync(long companyId, long branchId, long requestedByUserId, CreateStockAdjustmentRequest request, CancellationToken cancellationToken = default);
     Task<StockAdjustmentDto> ApproveAdjustmentAsync(long companyId, long adjustmentId, long approvedByUserId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<StockAdjustmentDto>> GetPendingAdjustmentsAsync(long companyId, long branchId, CancellationToken cancellationToken = default);
+
+    Task<StockTransferDto> CreateTransferAsync(long companyId, long fromBranchId, long requestedByUserId, CreateStockTransferRequest request, CancellationToken cancellationToken = default);
+    Task<StockTransferDto> SendTransferAsync(long companyId, long transferId, long sentByUserId, CancellationToken cancellationToken = default);
+    Task<StockTransferDto> ReceiveTransferAsync(long companyId, long transferId, long receivedByUserId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<StockTransferDto>> GetTransfersAsync(long companyId, long branchId, CancellationToken cancellationToken = default);
+
+    Task<StockCountDto> CreateCountAsync(long companyId, long branchId, long createdByUserId, CreateStockCountRequest request, CancellationToken cancellationToken = default);
+    Task<StockCountDto> SubmitCountLinesAsync(long companyId, long stockCountId, List<SubmitStockCountLineRequest> lines, CancellationToken cancellationToken = default);
+    Task<StockCountDto> CompleteCountAsync(long companyId, long stockCountId, long completedByUserId, CancellationToken cancellationToken = default);
 }

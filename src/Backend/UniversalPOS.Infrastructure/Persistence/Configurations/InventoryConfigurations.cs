@@ -60,3 +60,47 @@ public class StockAdjustmentLineConfiguration : IEntityTypeConfiguration<StockAd
         builder.Property(l => l.QuantityChange).HasPrecision(18, 3);
     }
 }
+
+public class StockTransferConfiguration : IEntityTypeConfiguration<StockTransfer>
+{
+    public void Configure(EntityTypeBuilder<StockTransfer> builder)
+    {
+        builder.HasIndex(t => new { t.FromBranchId, t.Status });
+        builder.HasIndex(t => new { t.ToBranchId, t.Status });
+
+        builder.HasMany(t => t.Lines)
+            .WithOne(l => l.StockTransfer)
+            .HasForeignKey(l => l.StockTransferId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class StockTransferLineConfiguration : IEntityTypeConfiguration<StockTransferLine>
+{
+    public void Configure(EntityTypeBuilder<StockTransferLine> builder)
+    {
+        builder.Property(l => l.Quantity).HasPrecision(18, 3);
+    }
+}
+
+public class StockCountConfiguration : IEntityTypeConfiguration<StockCount>
+{
+    public void Configure(EntityTypeBuilder<StockCount> builder)
+    {
+        builder.HasIndex(c => new { c.BranchId, c.Status });
+
+        builder.HasMany(c => c.Lines)
+            .WithOne(l => l.StockCount)
+            .HasForeignKey(l => l.StockCountId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class StockCountLineConfiguration : IEntityTypeConfiguration<StockCountLine>
+{
+    public void Configure(EntityTypeBuilder<StockCountLine> builder)
+    {
+        builder.Property(l => l.SystemQuantity).HasPrecision(18, 3);
+        builder.Property(l => l.CountedQuantity).HasPrecision(18, 3);
+    }
+}

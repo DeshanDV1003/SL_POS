@@ -11,11 +11,19 @@ public class StockService : IStockService
 {
     private readonly IApplicationDbContext _db;
     private readonly IValidator<CreateStockAdjustmentRequest> _adjustmentValidator;
+    private readonly IValidator<CreateStockTransferRequest> _transferValidator;
+    private readonly IValidator<SubmitStockCountLineRequest> _countLineValidator;
 
-    public StockService(IApplicationDbContext db, IValidator<CreateStockAdjustmentRequest> adjustmentValidator)
+    public StockService(
+        IApplicationDbContext db,
+        IValidator<CreateStockAdjustmentRequest> adjustmentValidator,
+        IValidator<CreateStockTransferRequest> transferValidator,
+        IValidator<SubmitStockCountLineRequest> countLineValidator)
     {
         _db = db;
         _adjustmentValidator = adjustmentValidator;
+        _transferValidator = transferValidator;
+        _countLineValidator = countLineValidator;
     }
 
     public async Task PostMovementAsync(
@@ -198,4 +206,231 @@ public class StockService : IStockService
         CreatedAtUtc = a.CreatedAtUtc,
         Lines = a.Lines.Select(l => new CreateStockAdjustmentLineRequest { ProductId = l.ProductId, QuantityChange = l.QuantityChange }).ToList(),
     };
+
+    public async Task<StockTransferDto> CreateTransferAsync(long companyId, long fromBranchId, long requestedByUserId, CreateStockTransferRequest request, CancellationToken cancellationToken = default)
+    {
+        await _transferValidator.ValidateAndThrowAsync(request, cancellationToken);
+
+        if (request.ToBranchId == fromBranchId)
+        {
+            throw new ConflictException("Cannot transfer stock from a branch to itself.");
+        }
+
+        if (!await _db.Branches.AnyAsync(b => b.Id == request.ToBranchId && b.CompanyId == companyId, cancellationToken))
+        {
+            throw new NotFoundException("Branch", request.ToBranchId);
+        }
+
+        var productIds = request.Lines.Select(l => l.ProductId).Distinct().ToList();
+        if (await _db.Products.CountAsync(p => p.CompanyId == companyId && productIds.Contains(p.Id), cancellationToken) != productIds.Count)
+        {
+            throw new NotFoundException("Product", string.Join(",", productIds));
+        }
+
+        var transfer = new StockTransfer
+        {
+            CompanyId = companyId,
+            FromBranchId = fromBranchId,
+            ToBranchId = request.ToBranchId,
+            RequestedByUserId = requestedByUserId,
+            Status = StockTransferStatus.Requested,
+            CreatedAtUtc = DateTime.UtcNow,
+        };
+        foreach (var line in request.Lines)
+        {
+            transfer.Lines.Add(new StockTransferLine { ProductId = line.ProductId, Quantity = line.Quantity });
+        }
+
+        _db.StockTransfers.Add(transfer);
+        await _db.SaveChangesAsync(cancellationToken);
+        return ToDto(transfer);
+    }
+
+    public async Task<StockTransferDto> SendTransferAsync(long companyId, long transferId, long sentByUserId, CancellationToken cancellationToken = default)
+    {
+        var transfer = await _db.StockTransfers.Include(t => t.Lines)
+            .FirstOrDefaultAsync(t => t.Id == transferId && t.CompanyId == companyId, cancellationToken)
+            ?? throw new NotFoundException(nameof(StockTransfer), transferId);
+
+        if (transfer.Status != StockTransferStatus.Requested)
+        {
+            throw new ConflictException($"Transfer {transferId} is not awaiting dispatch ({transfer.Status}).");
+        }
+
+        await _db.ExecuteInTransactionAsync(async () =>
+        {
+            foreach (var line in transfer.Lines)
+            {
+                await PostMovementAsync(companyId, transfer.FromBranchId, line.ProductId, StockMovementType.TransferOut, -line.Quantity,
+                    nameof(StockTransfer), transfer.Id, sentByUserId, cancellationToken);
+            }
+
+            transfer.Status = StockTransferStatus.Sent;
+            transfer.SentByUserId = sentByUserId;
+            transfer.SentAtUtc = DateTime.UtcNow;
+            await _db.SaveChangesAsync(cancellationToken);
+        });
+
+        return ToDto(transfer);
+    }
+
+    public async Task<StockTransferDto> ReceiveTransferAsync(long companyId, long transferId, long receivedByUserId, CancellationToken cancellationToken = default)
+    {
+        var transfer = await _db.StockTransfers.Include(t => t.Lines)
+            .FirstOrDefaultAsync(t => t.Id == transferId && t.CompanyId == companyId, cancellationToken)
+            ?? throw new NotFoundException(nameof(StockTransfer), transferId);
+
+        if (transfer.Status != StockTransferStatus.Sent)
+        {
+            throw new ConflictException($"Transfer {transferId} has not been sent yet ({transfer.Status}).");
+        }
+
+        await _db.ExecuteInTransactionAsync(async () =>
+        {
+            foreach (var line in transfer.Lines)
+            {
+                await PostMovementAsync(companyId, transfer.ToBranchId, line.ProductId, StockMovementType.TransferIn, line.Quantity,
+                    nameof(StockTransfer), transfer.Id, receivedByUserId, cancellationToken);
+            }
+
+            transfer.Status = StockTransferStatus.Received;
+            transfer.ReceivedByUserId = receivedByUserId;
+            transfer.ReceivedAtUtc = DateTime.UtcNow;
+            await _db.SaveChangesAsync(cancellationToken);
+        });
+
+        return ToDto(transfer);
+    }
+
+    public async Task<IReadOnlyList<StockTransferDto>> GetTransfersAsync(long companyId, long branchId, CancellationToken cancellationToken = default)
+    {
+        var transfers = await _db.StockTransfers.Include(t => t.Lines)
+            .Where(t => t.CompanyId == companyId && (t.FromBranchId == branchId || t.ToBranchId == branchId))
+            .OrderByDescending(t => t.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+        return transfers.Select(ToDto).ToList();
+    }
+
+    private static StockTransferDto ToDto(StockTransfer t) => new()
+    {
+        Id = t.Id,
+        FromBranchId = t.FromBranchId,
+        ToBranchId = t.ToBranchId,
+        Status = t.Status.ToString(),
+        CreatedAtUtc = t.CreatedAtUtc,
+        Lines = t.Lines.Select(l => new CreateStockTransferLineRequest { ProductId = l.ProductId, Quantity = l.Quantity }).ToList(),
+    };
+
+    public async Task<StockCountDto> CreateCountAsync(long companyId, long branchId, long createdByUserId, CreateStockCountRequest request, CancellationToken cancellationToken = default)
+    {
+        var query = _db.StockOnHands.Where(s => s.CompanyId == companyId && s.BranchId == branchId);
+        if (request.ProductIds.Count > 0)
+        {
+            query = query.Where(s => request.ProductIds.Contains(s.ProductId));
+        }
+
+        var stockRows = await query.ToListAsync(cancellationToken);
+
+        var count = new StockCount
+        {
+            CompanyId = companyId,
+            BranchId = branchId,
+            CreatedByUserId = createdByUserId,
+            Status = StockCountStatus.InProgress,
+            CreatedAtUtc = DateTime.UtcNow,
+        };
+        foreach (var row in stockRows)
+        {
+            count.Lines.Add(new StockCountLine { ProductId = row.ProductId, SystemQuantity = row.QuantityOnHand });
+        }
+
+        _db.StockCounts.Add(count);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return await BuildStockCountDtoAsync(count, cancellationToken);
+    }
+
+    public async Task<StockCountDto> SubmitCountLinesAsync(long companyId, long stockCountId, List<SubmitStockCountLineRequest> lines, CancellationToken cancellationToken = default)
+    {
+        foreach (var line in lines)
+        {
+            await _countLineValidator.ValidateAndThrowAsync(line, cancellationToken);
+        }
+
+        var count = await _db.StockCounts.Include(c => c.Lines)
+            .FirstOrDefaultAsync(c => c.Id == stockCountId && c.CompanyId == companyId, cancellationToken)
+            ?? throw new NotFoundException(nameof(StockCount), stockCountId);
+
+        if (count.Status != StockCountStatus.InProgress)
+        {
+            throw new ConflictException($"Stock count {stockCountId} is not in progress ({count.Status}).");
+        }
+
+        foreach (var lineRequest in lines)
+        {
+            var line = count.Lines.FirstOrDefault(l => l.ProductId == lineRequest.ProductId)
+                ?? throw new NotFoundException("StockCountLine for product", lineRequest.ProductId);
+            line.CountedQuantity = lineRequest.CountedQuantity;
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return await BuildStockCountDtoAsync(count, cancellationToken);
+    }
+
+    public async Task<StockCountDto> CompleteCountAsync(long companyId, long stockCountId, long completedByUserId, CancellationToken cancellationToken = default)
+    {
+        var count = await _db.StockCounts.Include(c => c.Lines)
+            .FirstOrDefaultAsync(c => c.Id == stockCountId && c.CompanyId == companyId, cancellationToken)
+            ?? throw new NotFoundException(nameof(StockCount), stockCountId);
+
+        if (count.Status != StockCountStatus.InProgress)
+        {
+            throw new ConflictException($"Stock count {stockCountId} is not in progress ({count.Status}).");
+        }
+
+        if (count.Lines.Any(l => !l.CountedQuantity.HasValue))
+        {
+            throw new ConflictException("Every line must have a counted quantity before the count can be completed.");
+        }
+
+        await _db.ExecuteInTransactionAsync(async () =>
+        {
+            foreach (var line in count.Lines)
+            {
+                var delta = line.CountedQuantity!.Value - line.SystemQuantity;
+                if (delta != 0)
+                {
+                    await PostMovementAsync(companyId, count.BranchId, line.ProductId, StockMovementType.StockCount, delta,
+                        nameof(StockCount), count.Id, completedByUserId, cancellationToken);
+                }
+            }
+
+            count.Status = StockCountStatus.Completed;
+            count.CompletedByUserId = completedByUserId;
+            count.CompletedAtUtc = DateTime.UtcNow;
+            await _db.SaveChangesAsync(cancellationToken);
+        });
+
+        return await BuildStockCountDtoAsync(count, cancellationToken);
+    }
+
+    private async Task<StockCountDto> BuildStockCountDtoAsync(StockCount count, CancellationToken cancellationToken)
+    {
+        var productIds = count.Lines.Select(l => l.ProductId).ToList();
+        var products = await _db.Products.Where(p => productIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, cancellationToken);
+
+        return new StockCountDto
+        {
+            Id = count.Id,
+            Status = count.Status.ToString(),
+            CreatedAtUtc = count.CreatedAtUtc,
+            Lines = count.Lines.Select(l => new StockCountLineDto
+            {
+                ProductId = l.ProductId,
+                ProductName = products.TryGetValue(l.ProductId, out var p) ? p.Name : "(unknown)",
+                SystemQuantity = l.SystemQuantity,
+                CountedQuantity = l.CountedQuantity,
+            }).ToList(),
+        };
+    }
 }

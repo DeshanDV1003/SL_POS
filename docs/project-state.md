@@ -1,14 +1,18 @@
 # Universal POS — Project State
 
-Last updated: 2026-09-13, after Phase 10 (core reporting + dashboard).
+Last updated: 2026-09-13, after rounding out Phase 5's gaps (StockTransfer,
+StockCount, PurchaseInvoice, SupplierPayment).
 
 ## Current Phase
-Phase 10 (Reporting) core set complete and verified end-to-end: every report is a
-real aggregation query over the same SaleHeader/SaleLine/SalePayment/StockOnHand data
-every other module writes (never a separately tracked shadow total) — verified
-directly by making a real sale and confirming the summary/by-product/by-payment-method
-reports changed by exactly the expected amount. Phases 5-9 all have documented gaps
-(see Known Gaps). Awaiting go-ahead for the next module.
+Phase 5 is now functionally complete: branch-to-branch stock transfer (Requested ->
+Sent -> Received, stock leaves the source only on Send and arrives at the
+destination only on Receive), physical stock count reconciliation (a discrepancy
+between the system snapshot and what's physically counted posts a real correcting
+ledger entry, never silently absorbed), and supplier invoice/payment tracking
+(partial payments, status transitions Unpaid -> PartiallyPaid -> Paid, overpayment
+rejected) are all built and verified end-to-end. Phases 6-10 still have documented
+gaps (see Known Gaps). Awaiting go-ahead for the next round of gap-filling or the
+next new phase.
 
 ## Repository
 This project is now connected to a GitHub remote: `origin` ->
@@ -164,6 +168,26 @@ session out of auto mode.
   everything. Frontend: a Reports & Dashboard page.
   43 integration tests + 17 unit tests, all passing.
 
+- **Phase 5 gap-fill — StockTransfer, StockCount, PurchaseInvoice, SupplierPayment**:
+  StockTransfer (Requested/Sent/Received) posts a real TransferOut ledger movement at
+  the source branch only on Send and a real TransferIn movement at the destination
+  only on Receive — verified directly: stock at the source dropped by exactly the
+  transferred quantity on Send, and stock at the destination (zero beforehand) rose
+  by exactly that quantity only after Receive, not before. StockCount snapshots
+  StockOnHand into per-line SystemQuantity at creation, and completing the count
+  posts a real correcting ledger entry (movement type StockCount) for every line
+  where CountedQuantity differs — verified a 3-unit discrepancy correctly reduced
+  StockOnHand by exactly 3; completing a count with any line still uncounted is
+  rejected (409). PurchaseInvoice/SupplierPayment: GrandTotal computed from
+  SubTotal+TaxTotal, AmountPaid is a derived summary updated only alongside a
+  SupplierPayment row, status transitions Unpaid -> PartiallyPaid -> Paid — verified
+  directly with a real partial payment, a rejected overpayment attempt (400), and a
+  final payment that brought the invoice to Paid.
+  47 integration tests + 17 unit tests, all passing. No frontend screens were added
+  for these (back-office/warehouse operations, judged lower priority than POS-terminal
+  UI given the session's remaining scope) — the API is real and tested, but there is
+  no UI for it yet.
+
 ## Solution Layout
 ```
 UniversalPOS.slnx
@@ -196,14 +220,16 @@ docs/
   company-selector and relax this back to per-Company).
 
 ## Known Gaps / Not Yet Implemented
-**Within Phase 5, explicitly deferred (not fake — simply not built yet):**
-StockTransfer (branch-to-branch), StockCount (physical count reconciliation),
-PurchaseInvoice and SupplierPayment (the purchasing module currently stops at GRN —
-there is no supplier billing/payment tracking yet), purchase returns. The
-PurchaseOrder numbering scheme (`PO-{branchId}-{count+1:D6}`) is a simple counter, not
-a concurrency-safe sequence generator — two concurrent order creations on the same
+**Within Phase 5, still remaining after the gap-fill:** purchase returns (sending
+damaged/wrong goods back to a supplier) still isn't modeled. The PurchaseOrder
+numbering scheme (`PO-{branchId}-{count+1:D6}`) is a simple counter, not a
+concurrency-safe sequence generator — two concurrent order creations on the same
 branch could theoretically race to the same number; a dedicated NumberSequence table
-with proper locking is the correct fix before this goes to production concurrency.
+with proper locking is the correct fix before this goes to production concurrency
+(the same is true of the new StockTransfer/PurchaseInvoice flows, which don't even
+have their own display numbers yet — only a database Id). No frontend UI exists yet
+for stock transfer, stock count, or supplier invoicing/payment — they are real,
+tested APIs without a screen.
 
 **Within Phase 6, explicitly deferred:** price override at checkout (permission
 `sales.price.override` exists but nothing checks it — the line price always comes
@@ -268,11 +294,10 @@ real fiscal/e-invoice provider, real payment gateway integration, and the Phase
   business logic, because Sri Lanka's e-invoicing rollout is an active 2026 program.
 
 ## Next Task
-Ask the user which to do next: (a) finish Phase 5 (StockTransfer, StockCount,
-PurchaseInvoice, SupplierPayment), (b) round out Phase 6 gaps (price override,
-refunds, receipt printing), (c) round out Phase 7 gaps (table merge/split/transfer,
-KOT/BOT cancellation, delivery/takeaway details), (d) round out Phase 8 gaps
-(mandatory shift-to-sell, configurable business-day cutoff), (e) round out Phase 9
-gaps (pay-with-points at checkout, points expiry job, coupon codes), (f) round out
-Phase 10 gaps (trend charts, exports, kitchen-performance reports), or (g) start
-Phase 11 (Offline + Synchronization).
+Phase 5 gap-fill is done. Ask the user which to do next: (a) round out Phase 6 gaps
+(price override, refunds, receipt printing), (b) round out Phase 7 gaps (table
+merge/split/transfer, KOT/BOT cancellation, delivery/takeaway details), (c) round out
+Phase 8 gaps (mandatory shift-to-sell, configurable business-day cutoff), (d) round
+out Phase 9 gaps (pay-with-points at checkout, points expiry job, coupon codes), (e)
+round out Phase 10 gaps (trend charts, exports, kitchen-performance reports), or (f)
+start Phase 11 (Offline + Synchronization).

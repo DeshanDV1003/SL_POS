@@ -15,17 +15,23 @@ public class PurchaseOrderService : IPurchaseOrderService
     private readonly IStockService _stockService;
     private readonly IValidator<CreatePurchaseOrderRequest> _createValidator;
     private readonly IValidator<ReceiveGoodsRequest> _receiveValidator;
+    private readonly IValidator<CreatePurchaseInvoiceRequest> _invoiceValidator;
+    private readonly IValidator<RecordSupplierPaymentRequest> _paymentValidator;
 
     public PurchaseOrderService(
         IApplicationDbContext db,
         IStockService stockService,
         IValidator<CreatePurchaseOrderRequest> createValidator,
-        IValidator<ReceiveGoodsRequest> receiveValidator)
+        IValidator<ReceiveGoodsRequest> receiveValidator,
+        IValidator<CreatePurchaseInvoiceRequest> invoiceValidator,
+        IValidator<RecordSupplierPaymentRequest> paymentValidator)
     {
         _db = db;
         _stockService = stockService;
         _createValidator = createValidator;
         _receiveValidator = receiveValidator;
+        _invoiceValidator = invoiceValidator;
+        _paymentValidator = paymentValidator;
     }
 
     public async Task<PurchaseOrderDto> CreateAsync(long companyId, long branchId, long createdByUserId, CreatePurchaseOrderRequest request, CancellationToken cancellationToken = default)
@@ -258,5 +264,100 @@ public class PurchaseOrderService : IPurchaseOrderService
             QuantityReceived = l.QuantityReceived,
             UnitCost = l.UnitCost,
         }).ToList(),
+    };
+
+    public async Task<PurchaseInvoiceDto> CreateInvoiceAsync(long companyId, long branchId, CreatePurchaseInvoiceRequest request, CancellationToken cancellationToken = default)
+    {
+        await _invoiceValidator.ValidateAndThrowAsync(request, cancellationToken);
+
+        if (!await _db.Suppliers.AnyAsync(s => s.Id == request.SupplierId && s.CompanyId == companyId, cancellationToken))
+        {
+            throw new NotFoundException(nameof(Domain.Purchasing.Supplier), request.SupplierId);
+        }
+
+        if (request.GoodsReceivedNoteId.HasValue &&
+            !await _db.GoodsReceivedNotes.AnyAsync(g => g.Id == request.GoodsReceivedNoteId.Value && g.CompanyId == companyId, cancellationToken))
+        {
+            throw new NotFoundException(nameof(GoodsReceivedNote), request.GoodsReceivedNoteId.Value);
+        }
+
+        var invoice = new PurchaseInvoice
+        {
+            CompanyId = companyId,
+            BranchId = branchId,
+            SupplierId = request.SupplierId,
+            GoodsReceivedNoteId = request.GoodsReceivedNoteId,
+            SupplierInvoiceNumber = request.SupplierInvoiceNumber,
+            InvoiceDate = request.InvoiceDate,
+            SubTotal = request.SubTotal,
+            TaxTotal = request.TaxTotal,
+            GrandTotal = request.SubTotal + request.TaxTotal,
+            AmountPaid = 0,
+            Status = Domain.Purchasing.PurchaseInvoiceStatus.Unpaid,
+            CreatedAtUtc = DateTime.UtcNow,
+        };
+        _db.PurchaseInvoices.Add(invoice);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return ToDto(invoice);
+    }
+
+    public async Task<IReadOnlyList<PurchaseInvoiceDto>> GetInvoicesAsync(long companyId, long branchId, CancellationToken cancellationToken = default)
+    {
+        return await _db.PurchaseInvoices
+            .Where(i => i.CompanyId == companyId && i.BranchId == branchId)
+            .OrderByDescending(i => i.InvoiceDate)
+            .Select(i => ToDto(i))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<PurchaseInvoiceDto> RecordPaymentAsync(long companyId, long invoiceId, long userId, RecordSupplierPaymentRequest request, CancellationToken cancellationToken = default)
+    {
+        await _paymentValidator.ValidateAndThrowAsync(request, cancellationToken);
+
+        var invoice = await _db.PurchaseInvoices.FirstOrDefaultAsync(i => i.Id == invoiceId && i.CompanyId == companyId, cancellationToken)
+            ?? throw new NotFoundException(nameof(PurchaseInvoice), invoiceId);
+
+        if (invoice.Status == Domain.Purchasing.PurchaseInvoiceStatus.Paid)
+        {
+            throw new ConflictException($"Invoice {invoice.SupplierInvoiceNumber} is already fully paid.");
+        }
+
+        var remaining = invoice.GrandTotal - invoice.AmountPaid;
+        if (request.Amount > remaining)
+        {
+            throw new PaymentException($"Payment of {request.Amount:0.00} exceeds the remaining balance of {remaining:0.00}.");
+        }
+
+        _db.SupplierPayments.Add(new Domain.Purchasing.SupplierPayment
+        {
+            CompanyId = companyId,
+            SupplierId = invoice.SupplierId,
+            PurchaseInvoiceId = invoice.Id,
+            Amount = request.Amount,
+            Method = request.Method,
+            ReferenceNo = request.ReferenceNo,
+            CreatedByUserId = userId,
+            CreatedAtUtc = DateTime.UtcNow,
+        });
+
+        invoice.AmountPaid += request.Amount;
+        invoice.Status = invoice.AmountPaid >= invoice.GrandTotal
+            ? Domain.Purchasing.PurchaseInvoiceStatus.Paid
+            : Domain.Purchasing.PurchaseInvoiceStatus.PartiallyPaid;
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return ToDto(invoice);
+    }
+
+    private static PurchaseInvoiceDto ToDto(PurchaseInvoice invoice) => new()
+    {
+        Id = invoice.Id,
+        SupplierId = invoice.SupplierId,
+        SupplierInvoiceNumber = invoice.SupplierInvoiceNumber,
+        InvoiceDate = invoice.InvoiceDate,
+        GrandTotal = invoice.GrandTotal,
+        AmountPaid = invoice.AmountPaid,
+        Status = invoice.Status.ToString(),
     };
 }
