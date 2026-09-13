@@ -16,8 +16,10 @@ public static class PermissionCodes
 
     // Cash
     public const string CashDrawerOpen = "cash.drawer.open";
+    public const string CashShiftOpen = "cash.shift.open";
     public const string CashShiftClose = "cash.shift.close";
     public const string CashMovementCreate = "cash.movement.create";
+    public const string DayEndReportFinalize = "cash.dayend.finalize";
 
     // Inventory
     public const string InventoryAdjust = "inventory.adjust";
@@ -66,8 +68,10 @@ public static class PermissionCodes
         (SalesPriceOverride, "Sales", "Override a product's selling price at checkout"),
         (SalesReprint, "Sales", "Reprint a receipt/invoice"),
         (CashDrawerOpen, "Cash", "Open the cash drawer outside of a sale"),
+        (CashShiftOpen, "Cash", "Open a cashier shift"),
         (CashShiftClose, "Cash", "Close a cashier shift"),
         (CashMovementCreate, "Cash", "Record cash in/out/petty cash"),
+        (DayEndReportFinalize, "Cash", "Finalize (lock) a day-end Z-report"),
         (InventoryAdjust, "Inventory", "Post a stock adjustment"),
         (InventoryTransfer, "Inventory", "Create/approve a stock transfer"),
         (InventoryCount, "Inventory", "Perform a stock count"),

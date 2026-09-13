@@ -3,6 +3,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
+import { CashPage } from './pages/CashPage';
 import { CheckoutPage } from './pages/CheckoutPage';
 import { FloorPlanPage } from './pages/FloorPlanPage';
 import { KdsPage } from './pages/KdsPage';
@@ -69,6 +70,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <KdsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/cash"
+            element={
+              <ProtectedRoute>
+                <CashPage />
               </ProtectedRoute>
             }
           />

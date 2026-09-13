@@ -4,6 +4,7 @@ using UniversalPOS.Domain.Catalog;
 using UniversalPOS.Domain.Crm;
 using UniversalPOS.Domain.Fiscal;
 using UniversalPOS.Domain.Identity;
+using UniversalPOS.Domain.Cash;
 using UniversalPOS.Domain.Inventory;
 using UniversalPOS.Domain.Organization;
 using UniversalPOS.Domain.Purchasing;
@@ -77,6 +78,10 @@ public interface IApplicationDbContext
     DbSet<KitchenStation> KitchenStations { get; }
     DbSet<PreparationTicket> PreparationTickets { get; }
     DbSet<PreparationTicketLine> PreparationTicketLines { get; }
+
+    DbSet<CashierShift> CashierShifts { get; }
+    DbSet<CashMovement> CashMovements { get; }
+    DbSet<DayEndReport> DayEndReports { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 

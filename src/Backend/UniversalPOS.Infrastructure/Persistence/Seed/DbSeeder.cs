@@ -62,12 +62,13 @@ public static class DbSeeder
                 Domain.Identity.PermissionCodes.CustomerManage, Domain.Identity.PermissionCodes.StockAdjustmentApprove,
                 Domain.Identity.PermissionCodes.GoodsReceiptCreate, Domain.Identity.PermissionCodes.OrderCreate,
                 Domain.Identity.PermissionCodes.OrderBill, Domain.Identity.PermissionCodes.KdsUpdate,
+                Domain.Identity.PermissionCodes.CashShiftOpen, Domain.Identity.PermissionCodes.DayEndReportFinalize,
             },
             ["Cashier"] = new[]
             {
                 Domain.Identity.PermissionCodes.SalesCreate, Domain.Identity.PermissionCodes.SalesReprint,
                 Domain.Identity.PermissionCodes.CashMovementCreate, Domain.Identity.PermissionCodes.OrderCreate,
-                Domain.Identity.PermissionCodes.OrderBill,
+                Domain.Identity.PermissionCodes.OrderBill, Domain.Identity.PermissionCodes.CashShiftOpen,
             },
             ["KitchenStaff"] = new[]
             {

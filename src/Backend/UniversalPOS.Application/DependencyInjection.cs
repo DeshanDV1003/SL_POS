@@ -1,5 +1,6 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using UniversalPOS.Application.Cash;
 using UniversalPOS.Application.Catalog;
 using UniversalPOS.Application.Crm;
 using UniversalPOS.Application.Identity;
@@ -25,6 +26,7 @@ public static class DependencyInjection
         services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
         services.AddScoped<ISalesService, SalesService>();
         services.AddScoped<IRestaurantService, RestaurantService>();
+        services.AddScoped<ICashService, CashService>();
         return services;
     }
 }

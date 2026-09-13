@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using UniversalPOS.Domain.Cash;
 using UniversalPOS.Domain.Sales;
 
 namespace UniversalPOS.Infrastructure.Persistence.Configurations;
@@ -23,6 +24,11 @@ public class SaleHeaderConfiguration : IEntityTypeConfiguration<SaleHeader>
 
         builder.HasIndex(s => new { s.BranchId, s.InvoiceNumber }).IsUnique().HasFilter("[InvoiceNumber] IS NOT NULL");
         builder.HasIndex(s => s.ClientIdempotencyKey).IsUnique().HasFilter("[ClientIdempotencyKey] IS NOT NULL");
+
+        builder.HasOne<CashierShift>()
+            .WithMany()
+            .HasForeignKey(s => s.CashierShiftId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(s => s.Lines)
             .WithOne(l => l.SaleHeader)

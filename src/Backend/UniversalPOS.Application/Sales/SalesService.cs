@@ -83,12 +83,22 @@ public class SalesService : ISalesService
             .Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToList();
         var taxRates = await _db.TaxRates.Where(t => taxRateIds.Contains(t.Id)).ToDictionaryAsync(t => t.Id, cancellationToken);
 
+        // Attaching the cashier's open shift is best-effort, not mandatory: a shift is
+        // not currently required to complete a sale (see docs/project-state.md), so a
+        // sale with no open shift simply reports with CashierShiftId null rather than
+        // being blocked.
+        var openShiftId = await _db.CashierShifts
+            .Where(s => s.TerminalId == request.TerminalId && s.CashierUserId == cashierUserId && s.Status == Domain.Cash.ShiftStatus.Open)
+            .Select(s => (long?)s.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
         var sale = new SaleHeader
         {
             CompanyId = companyId,
             BranchId = branchId,
             TerminalId = request.TerminalId,
             CashierUserId = cashierUserId,
+            CashierShiftId = openShiftId,
             CustomerId = request.CustomerId,
             InvoiceMode = request.InvoiceMode,
             PurchaserTin = request.PurchaserTin,

@@ -5,6 +5,7 @@ using UniversalPOS.Domain.Catalog;
 using UniversalPOS.Domain.Crm;
 using UniversalPOS.Domain.Fiscal;
 using UniversalPOS.Domain.Identity;
+using UniversalPOS.Domain.Cash;
 using UniversalPOS.Domain.Inventory;
 using UniversalPOS.Domain.Organization;
 using UniversalPOS.Domain.Purchasing;
@@ -76,6 +77,10 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<KitchenStation> KitchenStations => Set<KitchenStation>();
     public DbSet<PreparationTicket> PreparationTickets => Set<PreparationTicket>();
     public DbSet<PreparationTicketLine> PreparationTicketLines => Set<PreparationTicketLine>();
+
+    public DbSet<CashierShift> CashierShifts => Set<CashierShift>();
+    public DbSet<CashMovement> CashMovements => Set<CashMovement>();
+    public DbSet<DayEndReport> DayEndReports => Set<DayEndReport>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

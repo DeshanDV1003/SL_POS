@@ -1,13 +1,24 @@
 # Universal POS — Project State
 
-Last updated: 2026-09-13, after Phase 7 (core restaurant POS).
+Last updated: 2026-09-13, after Phase 8 (core cash management).
 
 ## Current Phase
-Phase 7 (Restaurant POS) core flow complete and verified end-to-end: open table ->
-add items -> route to kitchen/bar stations as KOT/BOT -> KDS status updates -> bill
-(reusing the Phase 6 checkout engine, service charge included) -> table released.
-Phases 5 and 6 both have documented gaps (see Known Gaps). Awaiting go-ahead for the
-next module.
+Phase 8 (Cash Management) core flow complete and verified end-to-end: open a cashier
+shift on a terminal -> take cash/card sales against it -> record cash in/out/petty
+movements -> close the shift with a correctly derived expected-cash/variance figure
+-> generate a day-end (Z) report -> finalize it, after which it is locked against
+recomputation even as new sales are made that same day. Phases 5, 6, and 7 all have
+documented gaps (see Known Gaps). Awaiting go-ahead for the next module.
+
+## Repository
+This project is now connected to a GitHub remote: `origin` ->
+https://github.com/DeshanDV1003/SL_POS.git, branch `main` (the remote was empty when
+connected, so no history conflict). Git author identity (Deshan Vimukthi De Silva,
+dvdsilva@students.nsbm.ac.lk) is already configured globally on this machine — no
+config changes were made or are needed. Pushing to the remote is blocked by this
+session's auto-mode safety classifier (an external, visible action); the user pushes
+manually with `git push -u origin main` from a normal terminal, or by taking this
+session out of auto mode.
 
 ## Completed Modules
 - **Phase 0–2**: Discovery, architecture (`docs/architecture.md`), database design
@@ -97,6 +108,28 @@ next module.
   with no open order was reporting `OpenOrderId: 0` instead of `null` — the kind of
   bug that reads as "table 0 is open" to a naive client. Fixed with `TryGetValue`.
 
+- **Phase 8 — Cash Management (core)**: CashierShift (one open shift per terminal and
+  per user, enforced — verified a second open attempt on either axis returns 409),
+  CashMovement (cash in/out/petty within a shift), and a real Z-report
+  (`DayEndReport`) aggregated from the same SaleHeader/SalePayment data every other
+  report would use, not a separately-tracked shadow total. Closing a shift computes
+  `ExpectedCash = OpeningFloat + cash sales during the shift + CashIn - CashOut -
+  Petty` and the variance against what was actually counted — verified directly with
+  a real sale and a real petty-cash movement, not just asserted in isolation. A
+  finalized Z-report is locked: verified that a new sale made after finalizing a
+  day's report does not change that report's totals on a subsequent fetch, only a
+  fresh (different-date) report would reflect it. `SaleHeader` now carries an
+  optional `CashierShiftId`, attached automatically at checkout when the cashier has
+  one open on that terminal — attachment is best-effort, not mandatory (see gaps).
+  Frontend: a Cash Management page (open/close shift, record movements, generate and
+  finalize the Z-report).
+  32 integration tests + 17 unit tests, all passing.
+
+  No new production bug this phase, but a real test-design mistake was caught before
+  it caused flakiness: three cash tests each opening a shift would have collided on
+  the same seeded terminal and the same user's "one open shift" rule. Fixed by giving
+  each shift-opening test its own terminal index and, where needed, its own user.
+
 ## Solution Layout
 ```
 UniversalPOS.slnx
@@ -159,10 +192,19 @@ delivery zone/fee — `OrderType` distinguishes them but Takeaway/Delivery order
 no extra data captured), and printed KOT/BOT tickets (a real kitchen would print
 these, not just show them on a KDS screen).
 
-**Everything after Phase 7:** Cash/shift management and Z-reports, CRM/Loyalty
-beyond the bare Customer record, Reporting, Offline/sync, Hardware abstraction
+**Within Phase 8, explicitly deferred:** a shift is not mandatory to complete a sale
+(checkout works with or without one open — a real deployment likely wants to require
+it), `CashDrawerOpen` permission exists but nothing calls it (no hardware-drawer
+trigger endpoint yet — that's Phase 12's hardware abstraction), the "business day"
+boundary for a Z-report is a plain UTC calendar date rather than a configurable
+cutoff time (a sale at 12:30am would fall on the next calendar day even if the
+business considers that "still last night"), and there's no report listing/history
+endpoint (only get-by-date and finalize).
+
+**Everything after Phase 8:** CRM/Loyalty beyond the bare Customer record, a
+promotions engine, Reporting/dashboards, Offline/sync, Hardware abstraction
 implementations, real fiscal/e-invoice provider, real payment gateway integration,
-and the Phase 5/6 gaps listed above. ProductComponent/ProductModifierGroup tables
+and the Phase 5/6/7 gaps listed above. ProductComponent/ProductModifierGroup tables
 exist but nothing reads them (no checkout or order logic expands a bundle or applies
 a modifier's price adjustment yet).
 
@@ -179,5 +221,6 @@ a modifier's price adjustment yet).
 Ask the user which to do next: (a) finish Phase 5 (StockTransfer, StockCount,
 PurchaseInvoice, SupplierPayment), (b) round out Phase 6 gaps (price override,
 refunds, promotions engine, receipt printing), (c) round out Phase 7 gaps (table
-merge/split/transfer, KOT/BOT cancellation, delivery/takeaway details), or (d) start
-Phase 8 (Cash Management: cashier shifts, cash in/out, Z-report/day-end close).
+merge/split/transfer, KOT/BOT cancellation, delivery/takeaway details), (d) round out
+Phase 8 gaps (mandatory shift-to-sell, configurable business-day cutoff), or (e) start
+Phase 9 (CRM + Loyalty: points earning/redemption, membership tiers, promotions).

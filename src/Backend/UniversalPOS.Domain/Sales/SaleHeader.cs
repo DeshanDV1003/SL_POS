@@ -29,6 +29,9 @@ public class SaleHeader
     public long CashierUserId { get; set; }
     public long? CustomerId { get; set; }
 
+    /// <summary>The cashier's open shift at checkout time, if one existed — not mandatory, see docs/project-state.md.</summary>
+    public long? CashierShiftId { get; set; }
+
     /// <summary>Sequential and gapless per Branch — assigned only when the sale completes, never on hold.</summary>
     public string? InvoiceNumber { get; set; }
 
