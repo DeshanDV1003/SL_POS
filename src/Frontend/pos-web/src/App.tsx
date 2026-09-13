@@ -4,6 +4,9 @@ import { AuthProvider } from './context/AuthContext';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { CheckoutPage } from './pages/CheckoutPage';
+import { FloorPlanPage } from './pages/FloorPlanPage';
+import { KdsPage } from './pages/KdsPage';
+import { OrderPage } from './pages/OrderPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { StockPage } from './pages/StockPage';
 
@@ -42,6 +45,30 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <CheckoutPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/restaurant"
+            element={
+              <ProtectedRoute>
+                <FloorPlanPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/restaurant/orders/:orderId"
+            element={
+              <ProtectedRoute>
+                <OrderPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/kds"
+            element={
+              <ProtectedRoute>
+                <KdsPage />
               </ProtectedRoute>
             }
           />

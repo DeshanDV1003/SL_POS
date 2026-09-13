@@ -6,6 +6,7 @@ using UniversalPOS.Application.Identity;
 using UniversalPOS.Application.Inventory;
 using UniversalPOS.Application.Organization;
 using UniversalPOS.Application.Purchasing;
+using UniversalPOS.Application.Restaurant;
 using UniversalPOS.Application.Sales;
 
 namespace UniversalPOS.Application;
@@ -23,6 +24,7 @@ public static class DependencyInjection
         services.AddScoped<IStockService, StockService>();
         services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
         services.AddScoped<ISalesService, SalesService>();
+        services.AddScoped<IRestaurantService, RestaurantService>();
         return services;
     }
 }

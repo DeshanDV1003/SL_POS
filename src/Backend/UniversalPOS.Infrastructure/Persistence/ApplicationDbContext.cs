@@ -8,6 +8,7 @@ using UniversalPOS.Domain.Identity;
 using UniversalPOS.Domain.Inventory;
 using UniversalPOS.Domain.Organization;
 using UniversalPOS.Domain.Purchasing;
+using UniversalPOS.Domain.Restaurant;
 using UniversalPOS.Domain.Sales;
 
 namespace UniversalPOS.Infrastructure.Persistence;
@@ -66,6 +67,15 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<SalePayment> SalePayments => Set<SalePayment>();
     public DbSet<HeldBill> HeldBills => Set<HeldBill>();
     public DbSet<HeldBillLine> HeldBillLines => Set<HeldBillLine>();
+
+    public DbSet<Floor> Floors => Set<Floor>();
+    public DbSet<DiningTable> DiningTables => Set<DiningTable>();
+    public DbSet<TableSession> TableSessions => Set<TableSession>();
+    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OrderLine> OrderLines => Set<OrderLine>();
+    public DbSet<KitchenStation> KitchenStations => Set<KitchenStation>();
+    public DbSet<PreparationTicket> PreparationTickets => Set<PreparationTicket>();
+    public DbSet<PreparationTicketLine> PreparationTicketLines => Set<PreparationTicketLine>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

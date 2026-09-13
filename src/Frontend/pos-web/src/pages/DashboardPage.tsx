@@ -37,6 +37,8 @@ export function DashboardPage() {
         </div>
         <div className="header-actions">
           <Link to="/checkout" className="nav-link">Checkout</Link>
+          <Link to="/restaurant" className="nav-link">Floor Plan</Link>
+          <Link to="/kds" className="nav-link">Kitchen Display</Link>
           <Link to="/products" className="nav-link">Product Catalog</Link>
           <Link to="/stock" className="nav-link">Stock On Hand</Link>
           <button onClick={() => logout()}>Sign out</button>

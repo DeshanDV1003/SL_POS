@@ -53,6 +53,9 @@ public static class PermissionCodes
     // Restaurant
     public const string TableManage = "restaurant.table.manage";
     public const string KotCancel = "restaurant.kot.cancel";
+    public const string OrderCreate = "restaurant.order.create";
+    public const string KdsUpdate = "restaurant.kds.update";
+    public const string OrderBill = "restaurant.order.bill";
 
     public static readonly IReadOnlyList<(string Code, string Category, string Description)> All = new[]
     {
@@ -86,5 +89,8 @@ public static class PermissionCodes
         (AuditView, "Admin", "View audit logs"),
         (TableManage, "Restaurant", "Manage floors/tables"),
         (KotCancel, "Restaurant", "Cancel a KOT/BOT"),
+        (OrderCreate, "Restaurant", "Open a table/order and add items"),
+        (KdsUpdate, "Restaurant", "Update a kitchen ticket's preparation status"),
+        (OrderBill, "Restaurant", "Bill an order and take payment"),
     };
 }

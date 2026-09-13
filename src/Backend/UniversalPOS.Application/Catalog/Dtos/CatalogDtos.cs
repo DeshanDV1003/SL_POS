@@ -98,5 +98,6 @@ public class CreateProductRequest
     public bool TrackExpiry { get; set; }
     public bool TrackSerial { get; set; }
     public bool IsWeighted { get; set; }
+    public long? DefaultKitchenStationId { get; set; }
     public IReadOnlyList<string> Barcodes { get; set; } = Array.Empty<string>();
 }

@@ -1,14 +1,13 @@
 # Universal POS — Project State
 
-Last updated: 2026-09-13, after Phase 6 (core retail checkout).
+Last updated: 2026-09-13, after Phase 7 (core restaurant POS).
 
 ## Current Phase
-Phase 6 (Retail POS) core checkout is complete and verified end-to-end: barcode/search
--> cart -> checkout -> stock deduction -> receipt, with real payment authorization
-(cash + sandboxed card), split/overpaid cash with correct change, void with stock
-restoration and an audit trail, and hold/recall. Phase 5's StockTransfer, StockCount,
-PurchaseInvoice, and SupplierPayment remain unbuilt (see Known Gaps). Awaiting
-go-ahead for the next module.
+Phase 7 (Restaurant POS) core flow complete and verified end-to-end: open table ->
+add items -> route to kitchen/bar stations as KOT/BOT -> KDS status updates -> bill
+(reusing the Phase 6 checkout engine, service charge included) -> table released.
+Phases 5 and 6 both have documented gaps (see Known Gaps). Awaiting go-ahead for the
+next module.
 
 ## Completed Modules
 - **Phase 0–2**: Discovery, architecture (`docs/architecture.md`), database design
@@ -75,6 +74,29 @@ go-ahead for the next module.
   checkouts. Fixed by seeding a dedicated `qa.lockouttest` account used by nothing
   else, rather than reusing a "real" seeded user for a destructive test.
 
+- **Phase 7 — Restaurant POS (core)**: Floor/DiningTable/TableSession schema; Order/
+  OrderLine as the in-progress pre-bill cart (distinct from SaleHeader, since an order
+  accumulates rounds over an evening and tracks per-item kitchen status, neither of
+  which apply to a finalized sale); KitchenStation + a single unified PreparationTicket
+  model for both KOT and BOT, distinguished only by the station's Category — "same
+  architecture, different station" as planned in docs/database-design.md. Sending an
+  order to the kitchen groups its pending lines by each product's routed station and
+  creates one ticket per station (verified: a 2-item order split correctly into a
+  Main-Kitchen ticket and a Bar ticket). Billing an order calls straight into Phase 6's
+  `ISalesService.CheckoutAsync` with the order's lines — no duplicated tax/payment
+  logic — so it inherits the same payment-authorization-before-any-write guarantee;
+  verified directly: an underpayment that ignored the branch's 10% service charge left
+  the table Occupied and the order Open, and only the correct payment released the
+  table back to Available. Frontend: a floor plan (color-coded table status, tap to
+  seat/open an order), an order screen (add items, send to kitchen, bill), and a KDS
+  screen (per-station ticket queue with one-tap status advancement).
+  28 integration tests + 17 unit tests, all passing.
+
+  One real bug found via testing: `Dictionary<long,long>.GetValueOrDefault` on a
+  missing key returns 0 (not null) since the value type isn't nullable, so a table
+  with no open order was reporting `OpenOrderId: 0` instead of `null` — the kind of
+  bug that reads as "table 0 is open" to a naive client. Fixed with `TryGetValue`.
+
 ## Solution Layout
 ```
 UniversalPOS.slnx
@@ -128,13 +150,21 @@ implementation (checkout correctly rejects them with a clear 409 rather than sil
 mishandling them). `ApprovalRequest` table still has nothing writing to it — Sale void
 uses a direct permission check, not the approval-request workflow.
 
-**Everything after Phase 6:** Restaurant POS/KOT/BOT/KDS, Cash/shift management and
-Z-reports, CRM/Loyalty beyond the bare Customer record, Reporting, Offline/sync,
-Hardware abstraction implementations, real fiscal/e-invoice provider, real payment
-gateway integration, and the Phase 5 gaps listed above (StockTransfer, StockCount,
-PurchaseInvoice, SupplierPayment). ProductComponent/ProductModifierGroup tables exist
-but nothing reads them (no checkout logic to expand a bundle or apply a modifier's
-price adjustment).
+**Within Phase 7, explicitly deferred:** table merge/split/transfer (TableSession
+exists as a 1:1 with an Order; the "relink Order<->Table" mechanism the architecture
+doc describes for merge/split isn't implemented), delayed-ticket visual highlighting
+in the KDS, KOT/BOT cancellation with a reason and audit trail (`KotCancel`
+permission exists, nothing calls it), delivery/takeaway-specific fields (address,
+delivery zone/fee — `OrderType` distinguishes them but Takeaway/Delivery orders have
+no extra data captured), and printed KOT/BOT tickets (a real kitchen would print
+these, not just show them on a KDS screen).
+
+**Everything after Phase 7:** Cash/shift management and Z-reports, CRM/Loyalty
+beyond the bare Customer record, Reporting, Offline/sync, Hardware abstraction
+implementations, real fiscal/e-invoice provider, real payment gateway integration,
+and the Phase 5/6 gaps listed above. ProductComponent/ProductModifierGroup tables
+exist but nothing reads them (no checkout or order logic expands a bundle or applies
+a modifier's price adjustment yet).
 
 ## Architecture Decisions Locked In (see docs/architecture.md for full rationale)
 - Modular monolith, not microservices.
@@ -148,6 +178,6 @@ price adjustment).
 ## Next Task
 Ask the user which to do next: (a) finish Phase 5 (StockTransfer, StockCount,
 PurchaseInvoice, SupplierPayment), (b) round out Phase 6 gaps (price override,
-refunds, promotions engine, receipt printing), or (c) start Phase 7 (Restaurant POS:
-floors/tables, KOT/BOT, kitchen stations, KDS) using the Sale/Product/Stock foundation
-already built.
+refunds, promotions engine, receipt printing), (c) round out Phase 7 gaps (table
+merge/split/transfer, KOT/BOT cancellation, delivery/takeaway details), or (d) start
+Phase 8 (Cash Management: cashier shifts, cash in/out, Z-report/day-end close).

@@ -270,6 +270,7 @@ public class CatalogService : ICatalogService
             TrackExpiry = request.TrackExpiry,
             TrackSerial = request.TrackSerial,
             IsWeighted = request.IsWeighted,
+            DefaultKitchenStationId = request.DefaultKitchenStationId,
             CreatedAtUtc = DateTime.UtcNow,
         };
 

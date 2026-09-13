@@ -38,6 +38,9 @@ public class Product : AuditableEntity
 
     public bool IsActive { get; set; } = true;
 
+    /// <summary>Which kitchen/bar station a KOT/BOT for this product routes to. Null means it never generates a preparation ticket (e.g. a retail-only product).</summary>
+    public long? DefaultKitchenStationId { get; set; }
+
     public ICollection<ProductBarcode> Barcodes { get; set; } = new List<ProductBarcode>();
     public ICollection<ProductVariant> Variants { get; set; } = new List<ProductVariant>();
     public ICollection<ProductComponent> Components { get; set; } = new List<ProductComponent>();

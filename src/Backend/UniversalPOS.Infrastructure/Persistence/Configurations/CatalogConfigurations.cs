@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using UniversalPOS.Domain.Catalog;
+using UniversalPOS.Domain.Restaurant;
 
 namespace UniversalPOS.Infrastructure.Persistence.Configurations;
 
@@ -88,6 +89,11 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.HasOne<TaxRate>()
             .WithMany()
             .HasForeignKey(p => p.TaxRateId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<KitchenStation>()
+            .WithMany()
+            .HasForeignKey(p => p.DefaultKitchenStationId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(p => p.Barcodes)

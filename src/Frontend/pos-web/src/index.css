@@ -337,6 +337,98 @@ body {
   }
 }
 
+.table-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.table-card {
+  aspect-ratio: 1;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  color: white;
+  font-size: 1rem;
+}
+
+.table-card span {
+  font-size: 0.8rem;
+  opacity: 0.9;
+}
+
+.table-status {
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+}
+
+.table-available { background: #2f8f5b; }
+.table-occupied { background: #c14545; cursor: pointer; }
+.table-reserved { background: #b98a2e; }
+.table-cleaning { background: #6b7280; cursor: default; }
+.table-billing { background: #7a4fc9; cursor: pointer; }
+
+.station-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.station-tab {
+  padding: 0.5rem 1.2rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.station-tab.active {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.kds-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.kds-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.kds-card-header {
+  display: flex;
+  justify-content: space-between;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.kds-card ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.kds-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .dashboard section {
   margin-bottom: 2rem;
 }

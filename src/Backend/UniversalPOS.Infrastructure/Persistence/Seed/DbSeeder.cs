@@ -3,6 +3,7 @@ using UniversalPOS.Application.Common.Interfaces;
 using UniversalPOS.Domain.Catalog;
 using UniversalPOS.Domain.Identity;
 using UniversalPOS.Domain.Organization;
+using UniversalPOS.Domain.Restaurant;
 
 namespace UniversalPOS.Infrastructure.Persistence.Seed;
 
@@ -59,16 +60,18 @@ public static class DbSeeder
                 Domain.Identity.PermissionCodes.KotCancel, Domain.Identity.PermissionCodes.AuditView,
                 Domain.Identity.PermissionCodes.TaxRateManage, Domain.Identity.PermissionCodes.SupplierManage,
                 Domain.Identity.PermissionCodes.CustomerManage, Domain.Identity.PermissionCodes.StockAdjustmentApprove,
-                Domain.Identity.PermissionCodes.GoodsReceiptCreate,
+                Domain.Identity.PermissionCodes.GoodsReceiptCreate, Domain.Identity.PermissionCodes.OrderCreate,
+                Domain.Identity.PermissionCodes.OrderBill, Domain.Identity.PermissionCodes.KdsUpdate,
             },
             ["Cashier"] = new[]
             {
                 Domain.Identity.PermissionCodes.SalesCreate, Domain.Identity.PermissionCodes.SalesReprint,
-                Domain.Identity.PermissionCodes.CashMovementCreate,
+                Domain.Identity.PermissionCodes.CashMovementCreate, Domain.Identity.PermissionCodes.OrderCreate,
+                Domain.Identity.PermissionCodes.OrderBill,
             },
             ["KitchenStaff"] = new[]
             {
-                Domain.Identity.PermissionCodes.TableManage,
+                Domain.Identity.PermissionCodes.TableManage, Domain.Identity.PermissionCodes.KdsUpdate,
             },
         };
 
@@ -159,11 +162,27 @@ public static class DbSeeder
         db.Categories.AddRange(riceAndCurry, shortEats, beverages);
         await db.SaveChangesAsync();
 
+        var mainKitchen = new KitchenStation { CompanyId = company.Id, BranchId = colomboBranch.Id, Name = "Main Kitchen", Category = StationCategory.Kitchen };
+        var bar = new KitchenStation { CompanyId = company.Id, BranchId = colomboBranch.Id, Name = "Bar", Category = StationCategory.Bar };
+        db.KitchenStations.AddRange(mainKitchen, bar);
+        await db.SaveChangesAsync();
+
         db.Products.AddRange(
-            new Product { CompanyId = company.Id, CategoryId = riceAndCurry.Id, UnitId = portion.Id, Sku = "CS-RC-001", Name = "Chicken Rice & Curry", CostPrice = 380m, SellingPrice = 750m, ReorderLevel = 0, MinStock = 0, MaxStock = 0, CreatedAtUtc = DateTime.UtcNow },
-            new Product { CompanyId = company.Id, CategoryId = riceAndCurry.Id, UnitId = portion.Id, Sku = "CS-RC-002", Name = "Vegetable Rice & Curry", CostPrice = 220m, SellingPrice = 500m, ReorderLevel = 0, MinStock = 0, MaxStock = 0, CreatedAtUtc = DateTime.UtcNow },
-            new Product { CompanyId = company.Id, CategoryId = shortEats.Id, UnitId = portion.Id, Sku = "CS-SE-001", Name = "Chicken Kottu", CostPrice = 420m, SellingPrice = 850m, ReorderLevel = 0, MinStock = 0, MaxStock = 0, CreatedAtUtc = DateTime.UtcNow },
-            new Product { CompanyId = company.Id, CategoryId = beverages.Id, UnitId = portion.Id, Sku = "CS-BV-001", Name = "King Coconut", CostPrice = 80m, SellingPrice = 200m, ReorderLevel = 0, MinStock = 0, MaxStock = 0, CreatedAtUtc = DateTime.UtcNow });
+            new Product { CompanyId = company.Id, CategoryId = riceAndCurry.Id, UnitId = portion.Id, Sku = "CS-RC-001", Name = "Chicken Rice & Curry", CostPrice = 380m, SellingPrice = 750m, ReorderLevel = 0, MinStock = 0, MaxStock = 0, DefaultKitchenStationId = mainKitchen.Id, CreatedAtUtc = DateTime.UtcNow },
+            new Product { CompanyId = company.Id, CategoryId = riceAndCurry.Id, UnitId = portion.Id, Sku = "CS-RC-002", Name = "Vegetable Rice & Curry", CostPrice = 220m, SellingPrice = 500m, ReorderLevel = 0, MinStock = 0, MaxStock = 0, DefaultKitchenStationId = mainKitchen.Id, CreatedAtUtc = DateTime.UtcNow },
+            new Product { CompanyId = company.Id, CategoryId = shortEats.Id, UnitId = portion.Id, Sku = "CS-SE-001", Name = "Chicken Kottu", CostPrice = 420m, SellingPrice = 850m, ReorderLevel = 0, MinStock = 0, MaxStock = 0, DefaultKitchenStationId = mainKitchen.Id, CreatedAtUtc = DateTime.UtcNow },
+            new Product { CompanyId = company.Id, CategoryId = beverages.Id, UnitId = portion.Id, Sku = "CS-BV-001", Name = "King Coconut", CostPrice = 80m, SellingPrice = 200m, ReorderLevel = 0, MinStock = 0, MaxStock = 0, DefaultKitchenStationId = bar.Id, CreatedAtUtc = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+
+        var groundFloor = new Floor { CompanyId = company.Id, BranchId = colomboBranch.Id, Name = "Ground Floor", SortOrder = 1 };
+        db.Floors.Add(groundFloor);
+        await db.SaveChangesAsync();
+
+        db.DiningTables.AddRange(
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T1", Capacity = 2 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T2", Capacity = 4 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T3", Capacity = 4 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T4", Capacity = 6 });
         await db.SaveChangesAsync();
     }
 
