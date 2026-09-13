@@ -39,6 +39,7 @@ export function DashboardPage() {
           <Link to="/checkout" className="nav-link">Checkout</Link>
           <Link to="/cash" className="nav-link">Cash Management</Link>
           <Link to="/customers" className="nav-link">Customers</Link>
+          <Link to="/reports" className="nav-link">Reports</Link>
           <Link to="/restaurant" className="nav-link">Floor Plan</Link>
           <Link to="/kds" className="nav-link">Kitchen Display</Link>
           <Link to="/products" className="nav-link">Product Catalog</Link>

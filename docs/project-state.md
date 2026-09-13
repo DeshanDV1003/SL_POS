@@ -1,14 +1,14 @@
 # Universal POS — Project State
 
-Last updated: 2026-09-13, after Phase 9 (core CRM + loyalty + promotions).
+Last updated: 2026-09-13, after Phase 10 (core reporting + dashboard).
 
 ## Current Phase
-Phase 9 (CRM + Loyalty) core flow complete and verified end-to-end: a sale attached to
-a customer earns real, traceable loyalty points and can trigger an automatic
-membership-tier upgrade; a manual point adjustment requires permission and writes a
-real audit log entry; over-redemption is rejected; and an automatic promotion
-correctly out-competes a smaller manual line discount at checkout. Phases 5-8 all have
-documented gaps (see Known Gaps). Awaiting go-ahead for the next module.
+Phase 10 (Reporting) core set complete and verified end-to-end: every report is a
+real aggregation query over the same SaleHeader/SaleLine/SalePayment/StockOnHand data
+every other module writes (never a separately tracked shadow total) — verified
+directly by making a real sale and confirming the summary/by-product/by-payment-method
+reports changed by exactly the expected amount. Phases 5-9 all have documented gaps
+(see Known Gaps). Awaiting go-ahead for the next module.
 
 ## Repository
 This project is now connected to a GitHub remote: `origin` ->
@@ -149,6 +149,21 @@ session out of auto mode.
   Frontend: a Customers page (list, create, loyalty balance/tier display).
   37 integration tests + 17 unit tests, all passing.
 
+- **Phase 10 — Reporting + Dashboard (core)**: Sales summary (gross/discount/tax/
+  net/void-count/average), sales by product, by category, by cashier, by payment
+  method, a stock valuation report (quantity-on-hand x cost price per product), and a
+  management dashboard (today's/7-day net sales, low-stock count, top 5 products) —
+  all real aggregation queries with a date range (defaulting to the last 7 days), not
+  a separately maintained summary table. Verified directly: making a real sale and
+  re-fetching the summary showed net sales increase by exactly that sale's grand
+  total and the transaction count by exactly 1, and sales-by-payment-method
+  correctly separated a card sale from prior cash sales. Permissions split as
+  `reports.view.sales` (summary/by-product/by-category, and the dashboard) vs.
+  `reports.view.financial` (by-cashier, by-payment-method, stock-valuation) —
+  verified a cashier is blocked from all of them and a manager holding both can see
+  everything. Frontend: a Reports & Dashboard page.
+  43 integration tests + 17 unit tests, all passing.
+
 ## Solution Layout
 ```
 UniversalPOS.slnx
@@ -230,9 +245,18 @@ a promo code) aren't modeled — only automatic, rule-matched promotions exist.
 Promotion matching does one DB query per sale line (fine at SMB cart sizes, a
 documented N+1-shaped inefficiency at large cart sizes).
 
-**Everything after Phase 9:** Reporting/dashboards, Offline/sync, Hardware
-abstraction implementations, real fiscal/e-invoice provider, real payment gateway
-integration, and the Phase 5/6/7/8 gaps listed above.
+**Within Phase 10, explicitly deferred:** dead/slow-moving stock analysis (needs
+historical comparison over time, not just a point-in-time snapshot), a discount
+report and a dedicated tax report as separate views (the numbers exist inside sales
+summary but aren't broken out into their own report), waiter/kitchen-performance
+reports (average prep time, cancelled-KOT counts — the PreparationTicket data exists
+from Phase 7 but nothing aggregates it yet), branch-comparison and revenue-trend
+charts (only single-branch, non-trended numbers exist), and CSV/PDF export (reports
+are JSON API responses only, no download format).
+
+**Everything after Phase 10:** Offline/sync, Hardware abstraction implementations,
+real fiscal/e-invoice provider, real payment gateway integration, and the Phase
+5/6/7/8/9 gaps listed above.
 
 ## Architecture Decisions Locked In (see docs/architecture.md for full rationale)
 - Modular monolith, not microservices.
@@ -249,5 +273,6 @@ PurchaseInvoice, SupplierPayment), (b) round out Phase 6 gaps (price override,
 refunds, receipt printing), (c) round out Phase 7 gaps (table merge/split/transfer,
 KOT/BOT cancellation, delivery/takeaway details), (d) round out Phase 8 gaps
 (mandatory shift-to-sell, configurable business-day cutoff), (e) round out Phase 9
-gaps (pay-with-points at checkout, points expiry job, coupon codes), or (f) start
-Phase 10 (Reporting: sales/inventory/finance/management reports and role dashboards).
+gaps (pay-with-points at checkout, points expiry job, coupon codes), (f) round out
+Phase 10 gaps (trend charts, exports, kitchen-performance reports), or (g) start
+Phase 11 (Offline + Synchronization).

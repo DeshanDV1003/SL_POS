@@ -10,6 +10,7 @@ import { FloorPlanPage } from './pages/FloorPlanPage';
 import { KdsPage } from './pages/KdsPage';
 import { OrderPage } from './pages/OrderPage';
 import { ProductsPage } from './pages/ProductsPage';
+import { ReportsPage } from './pages/ReportsPage';
 import { StockPage } from './pages/StockPage';
 
 export default function App() {
@@ -87,6 +88,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <CustomersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/reports"
+            element={
+              <ProtectedRoute>
+                <ReportsPage />
               </ProtectedRoute>
             }
           />
