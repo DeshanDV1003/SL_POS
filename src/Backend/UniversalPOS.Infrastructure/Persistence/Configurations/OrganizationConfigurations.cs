@@ -12,6 +12,8 @@ public class CompanyConfiguration : IEntityTypeConfiguration<Company>
         builder.Property(c => c.LegalName).HasMaxLength(200).IsRequired();
         builder.Property(c => c.DefaultCurrencyCode).HasMaxLength(3).IsRequired();
         builder.Property(c => c.TaxRegistrationNo).HasMaxLength(20);
+        builder.Property(c => c.LoyaltyPointsPerCurrencyUnit).HasPrecision(9, 6);
+        builder.Property(c => c.LoyaltyPointRedemptionValue).HasPrecision(18, 2);
 
         builder.HasMany(c => c.Branches)
             .WithOne(b => b.Company)

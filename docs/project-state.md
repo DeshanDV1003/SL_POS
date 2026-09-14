@@ -259,6 +259,36 @@ session out of auto mode.
   stale invoice-number sequence collision; recreating the test database (migrations +
   seed re-run automatically on next startup) cleared it — not a product bug.
 
+- **Phase 9 gap-fill — pay-with-points, coupon codes, per-company loyalty rates, points
+  expiry**: `PaymentMethod.LoyaltyPoints` is handled entirely inside `SalesService`
+  rather than through `IPaymentProvider` (it needs the sale's CustomerId, which
+  `PaymentAuthorizationRequest` doesn't carry, and the ledger write must happen inside
+  the sale's own transaction) — verified: a customer with enough points can pay part of
+  a sale with them (a real `Redeemed` LoyaltyTransaction referencing the sale, balance
+  deducted), a sale attempted without a customer is rejected 400, and one that exceeds
+  the customer's balance is rejected 409. `Domain.Sales.Coupon` supports customer-typed
+  codes, applied as a flat reduction to `GrandTotal` (a documented v1 simplification —
+  like a manufacturer coupon, it doesn't redistribute across lines or change the tax
+  base) — verified the discount percentage against the pre-coupon total, the coupon's
+  `TimesRedeemed` incrementing, and 404/409 for an unknown/expired/limit-reached code.
+  `Company.LoyaltyPointsPerCurrencyUnit` and `LoyaltyPointRedemptionValue` replace the
+  old hardcoded 1-point-per-LKR-100 constant, updated via
+  `PUT /companies/{id}/loyalty-settings` (gated by `company.manage`, verified 403 for a
+  manager) — verified a changed earn rate actually changes the points a real checkout
+  earns. `LoyaltyTransaction.ExpiresAtUtc`/`IsExpired` and
+  `ILoyaltyService.ExpirePointsAsync` implement expiry as a **v1 simplification**: it
+  expires at the customer-balance level (capped at their current balance) rather than
+  tracking each Earned batch's remaining points through FIFO redemption consumption —
+  a real system would need that for exact correctness, but this is honest, safe (never
+  goes negative), and real (posts an actual `Expired` ledger row, marks batches
+  processed so a rerun is a no-op). A `PointsExpiryBackgroundService` runs it daily for
+  every active company; `POST /companies/{id}/loyalty/expire-points` runs it on demand
+  (used by tests, so this doesn't require waiting a day to verify) — verified
+  end-to-end by backdating a real Earned batch's `ExpiresAtUtc` (via direct DbContext
+  access in the test, the same way a live verification would reach into the real
+  database) and confirming the balance dropped exactly once, not twice on a rerun.
+  79 integration tests + 17 unit tests, all passing.
+
 ## Solution Layout
 ```
 UniversalPOS.slnx
@@ -332,15 +362,18 @@ No frontend UI was added for the new branch cash-settings screen, day-end-report
 history list, or a "open drawer" button — real, tested APIs without a screen, same
 tradeoff as prior gap-fills.
 
-**Within Phase 9, explicitly deferred:** redemption is a standalone action (deduct
-points, e.g. for a physical reward) and does NOT yet apply as a discount/payment
-within checkout — a "pay with points" flow at the register isn't built. Points expiry
-(the `Expired` transaction type exists on the enum, nothing generates one — no
-scheduled job walks old transactions). The earn rate (1 point per LKR 100) is a
-hardcoded constant, not per-company configurable. Coupon codes (a customer typing in
-a promo code) aren't modeled — only automatic, rule-matched promotions exist.
-Promotion matching does one DB query per sale line (fine at SMB cart sizes, a
-documented N+1-shaped inefficiency at large cart sizes).
+**Within Phase 9, still remaining after the gap-fill:** points expiry is a
+customer-balance-level approximation, not true per-batch FIFO consumption tracking
+(documented above). Void/Refund still don't reverse the loyalty points a sale earned
+or redeemed — voiding a points-paid sale does not credit the points back, and
+refunding a sale that earned points does not claw them back; this was already true
+before the gap-fill and remains a real gap. A coupon still can't be scoped to specific
+products/categories or stacked with a Promotion in any smarter way than "apply once,
+flatly, to the final total" — no per-line coupon logic. Promotion matching still does
+one DB query per sale line (fine at SMB cart sizes, a documented N+1-shaped
+inefficiency at large cart sizes). No frontend UI was added for pay-with-points,
+coupon management, or loyalty-settings — real, tested APIs without a screen, same
+tradeoff as prior gap-fills.
 
 **Within Phase 10, explicitly deferred:** dead/slow-moving stock analysis (needs
 historical comparison over time, not just a point-in-time snapshot), a discount
@@ -365,9 +398,8 @@ real fiscal/e-invoice provider, real payment gateway integration, and the Phase
   business logic, because Sri Lanka's e-invoicing rollout is an active 2026 program.
 
 ## Next Task
-Phase 5, 6, 7, and 8 gap-fills are done. The user has asked for 9 and 10 gap-fill
-next, in that order: (a) Phase 9 (pay-with-points at checkout, points expiry job,
-per-company-configurable loyalty earn rate, coupon codes), (b) Phase 10 (trend/
-branch-comparison charts, CSV/PDF export, kitchen/waiter-performance reports,
-separate discount/tax report views, dead/slow-moving stock analysis). After that,
-Phase 11 (Offline + Synchronization) is the next new phase.
+Phase 5, 6, 7, 8, and 9 gap-fills are done. The user has asked for Phase 10 gap-fill
+next: trend/branch-comparison charts, CSV/PDF export, kitchen/waiter-performance
+reports (aggregating existing PreparationTicket data), separate discount/tax report
+views, dead/slow-moving stock analysis. After that, Phase 11 (Offline +
+Synchronization) is the next new phase.

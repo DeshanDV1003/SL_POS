@@ -182,10 +182,43 @@ public class SalesService : ISalesService
         var serviceChargeTotal = Domain.Sales.Money.Round((subTotal - discountTotal) * branch.ServiceChargeRate);
         var grandTotal = Domain.Sales.Money.Round(lineTotalsSum + serviceChargeTotal);
 
+        Coupon? coupon = null;
+        decimal couponDiscountAmount = 0;
+        if (!string.IsNullOrWhiteSpace(request.CouponCode))
+        {
+            var code = request.CouponCode.Trim().ToUpperInvariant();
+            var now = DateTime.UtcNow;
+            coupon = await _db.Coupons.FirstOrDefaultAsync(c => c.CompanyId == companyId && c.Code == code, cancellationToken)
+                ?? throw new NotFoundException(nameof(Coupon), code);
+
+            if (!coupon.IsActive || (coupon.ExpiresAtUtc.HasValue && coupon.ExpiresAtUtc.Value <= now))
+            {
+                throw new ConflictException($"Coupon '{code}' is no longer valid.");
+            }
+            if (coupon.MaxRedemptions.HasValue && coupon.TimesRedeemed >= coupon.MaxRedemptions.Value)
+            {
+                throw new ConflictException($"Coupon '{code}' has reached its redemption limit.");
+            }
+            if (subTotal < coupon.MinSaleAmount)
+            {
+                throw new ConflictException($"Coupon '{code}' requires a subtotal of at least {coupon.MinSaleAmount:0.00}.");
+            }
+
+            // v1 simplification: a flat reduction to GrandTotal — like a manufacturer
+            // coupon — rather than redistributing the discount across lines and
+            // recomputing the tax base. See docs/project-state.md.
+            couponDiscountAmount = coupon.DiscountType == PromotionDiscountType.Percentage
+                ? Domain.Sales.Money.Round(grandTotal * coupon.DiscountValue / 100m)
+                : Math.Min(coupon.DiscountValue, grandTotal);
+            grandTotal = Domain.Sales.Money.Round(grandTotal - couponDiscountAmount);
+        }
+
         sale.SubTotal = subTotal;
         sale.DiscountTotal = discountTotal;
         sale.TaxTotal = taxTotal;
         sale.ServiceChargeTotal = serviceChargeTotal;
+        sale.CouponId = coupon?.Id;
+        sale.CouponDiscountAmount = couponDiscountAmount;
         sale.GrandTotal = grandTotal;
 
         Domain.Sales.PaymentAllocationResult allocation;
@@ -206,10 +239,36 @@ public class SalesService : ISalesService
         }
 
         // Authorize every non-cash payment BEFORE any database write — a decline must
-        // never leave a half-created sale behind.
+        // never leave a half-created sale behind. LoyaltyPoints is handled entirely
+        // here rather than via IPaymentProvider — it needs the sale's CustomerId, which
+        // PaymentAuthorizationRequest doesn't carry, and the actual point deduction
+        // must happen inside the same transaction as the sale (below), once sale.Id
+        // exists for the ledger row to reference.
         var authorizedPayments = new List<(CreateSalePaymentRequest Request, string? ProviderReference)>();
+        var pointsToRedeem = 0;
         foreach (var paymentRequest in request.Payments)
         {
+            if (paymentRequest.Method == Domain.Sales.PaymentMethod.LoyaltyPoints)
+            {
+                if (!sale.CustomerId.HasValue)
+                {
+                    throw new ValidationFailedException(new Dictionary<string, string[]>
+                    {
+                        ["customerId"] = new[] { "A customer must be selected to pay with loyalty points." },
+                    });
+                }
+
+                var (points, hasEnough) = await _loyaltyService.QuotePointsForAmountAsync(companyId, sale.CustomerId.Value, paymentRequest.Amount, cancellationToken);
+                if (!hasEnough)
+                {
+                    throw new ConflictException("Customer does not have enough loyalty points to cover this payment amount.");
+                }
+
+                pointsToRedeem += points;
+                authorizedPayments.Add((paymentRequest, "LOYALTY"));
+                continue;
+            }
+
             if (!_paymentProviders.TryGetValue(paymentRequest.Method, out var provider))
             {
                 throw new ConflictException($"Payment method '{paymentRequest.Method}' has no configured provider yet.");
@@ -270,9 +329,20 @@ public class SalesService : ISalesService
 
             await _db.SaveChangesAsync(cancellationToken);
 
+            if (pointsToRedeem > 0)
+            {
+                await _loyaltyService.RedeemPointsForSaleAsync(companyId, sale.CustomerId!.Value, pointsToRedeem, sale.Id, cancellationToken);
+            }
+
             if (sale.CustomerId.HasValue)
             {
                 await _loyaltyService.EarnPointsForSaleAsync(companyId, sale.CustomerId.Value, sale.Id, sale.GrandTotal, cancellationToken);
+            }
+
+            if (coupon is not null)
+            {
+                coupon.TimesRedeemed += 1;
+                await _db.SaveChangesAsync(cancellationToken);
             }
         });
 
@@ -557,6 +627,7 @@ public class SalesService : ISalesService
         DiscountTotal = sale.DiscountTotal,
         TaxTotal = sale.TaxTotal,
         ServiceChargeTotal = sale.ServiceChargeTotal,
+        CouponDiscountAmount = sale.CouponDiscountAmount,
         GrandTotal = sale.GrandTotal,
         CompletedAtUtc = sale.CompletedAtUtc ?? sale.CreatedAtUtc,
         Lines = sale.Lines.Select(l => new SaleLineDto

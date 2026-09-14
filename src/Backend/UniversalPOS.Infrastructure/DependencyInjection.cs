@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using UniversalPOS.Application.Common.Interfaces;
 using UniversalPOS.Application.Sales;
+using UniversalPOS.Infrastructure.BackgroundJobs;
 using UniversalPOS.Infrastructure.Payments;
 using UniversalPOS.Infrastructure.Persistence;
 using UniversalPOS.Infrastructure.Services;
@@ -29,6 +30,8 @@ public static class DependencyInjection
 
         services.AddScoped<IPaymentProvider, CashPaymentProvider>();
         services.AddScoped<IPaymentProvider, SandboxCardPaymentProvider>();
+
+        services.AddHostedService<PointsExpiryBackgroundService>();
 
         return services;
     }

@@ -5,6 +5,7 @@ namespace UniversalPOS.Application.Organization;
 public interface IOrganizationQueryService
 {
     Task<IReadOnlyList<CompanyDto>> GetCompaniesAsync(CancellationToken cancellationToken = default);
+    Task<CompanyDto> UpdateCompanyLoyaltySettingsAsync(long companyId, UpdateCompanyLoyaltySettingsRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BranchDto>> GetBranchesAsync(long companyId, CancellationToken cancellationToken = default);
     Task<BranchDto> UpdateBranchCashSettingsAsync(long companyId, long branchId, UpdateBranchCashSettingsRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<TerminalDto>> GetTerminalsAsync(long branchId, CancellationToken cancellationToken = default);

@@ -10,13 +10,6 @@ namespace UniversalPOS.Application.Crm;
 
 public class LoyaltyService : ILoyaltyService
 {
-    /// <summary>
-    /// Default earn rate: 1 point per LKR 100 spent. Not yet per-company configurable
-    /// — see docs/project-state.md. Multiplied by the customer's current membership
-    /// tier's PointsMultiplier, if any.
-    /// </summary>
-    private const decimal PointsPerCurrencyUnit = 1m / 100m;
-
     private readonly IApplicationDbContext _db;
     private readonly IValidator<RedeemPointsRequest> _redeemValidator;
     private readonly IValidator<AdjustLoyaltyPointsRequest> _adjustValidator;
@@ -42,6 +35,9 @@ public class LoyaltyService : ILoyaltyService
             return; // best-effort: an invalid customer id should not fail the sale that already completed.
         }
 
+        var company = await _db.Companies.FirstOrDefaultAsync(c => c.Id == companyId, cancellationToken)
+            ?? throw new NotFoundException(nameof(Domain.Organization.Company), companyId);
+
         var multiplier = 1m;
         if (customer.MembershipTierId.HasValue)
         {
@@ -52,13 +48,51 @@ public class LoyaltyService : ILoyaltyService
             if (multiplier == 0) multiplier = 1m;
         }
 
-        var points = (int)Math.Floor(grandTotal * PointsPerCurrencyUnit * multiplier);
+        var points = (int)Math.Floor(grandTotal * company.LoyaltyPointsPerCurrencyUnit * multiplier);
         if (points <= 0)
         {
             return;
         }
 
-        await PostLoyaltyTransactionAsync(customer, LoyaltyTransactionType.Earned, points, nameof(Domain.Sales.SaleHeader), saleHeaderId, null, null, cancellationToken);
+        var expiresAtUtc = company.LoyaltyPointsExpiryMonths.HasValue
+            ? DateTime.UtcNow.AddMonths(company.LoyaltyPointsExpiryMonths.Value)
+            : (DateTime?)null;
+
+        await PostLoyaltyTransactionAsync(customer, LoyaltyTransactionType.Earned, points, nameof(Domain.Sales.SaleHeader), saleHeaderId, null, null, expiresAtUtc, cancellationToken);
+    }
+
+    public async Task<(int PointsRequired, bool HasEnoughBalance)> QuotePointsForAmountAsync(long companyId, long customerId, decimal amount, CancellationToken cancellationToken = default)
+    {
+        var company = await _db.Companies.FirstOrDefaultAsync(c => c.Id == companyId, cancellationToken)
+            ?? throw new NotFoundException(nameof(Domain.Organization.Company), companyId);
+        var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == customerId && c.CompanyId == companyId, cancellationToken)
+            ?? throw new NotFoundException(nameof(Customer), customerId);
+
+        if (company.LoyaltyPointRedemptionValue <= 0)
+        {
+            throw new ConflictException("This company has not configured a loyalty point redemption value.");
+        }
+
+        var pointsRequired = (int)Math.Ceiling(amount / company.LoyaltyPointRedemptionValue);
+        return (pointsRequired, customer.LoyaltyPointsBalance >= pointsRequired);
+    }
+
+    public async Task RedeemPointsForSaleAsync(long companyId, long customerId, int points, long saleHeaderId, CancellationToken cancellationToken = default)
+    {
+        if (points <= 0)
+        {
+            return;
+        }
+
+        var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == customerId && c.CompanyId == companyId, cancellationToken)
+            ?? throw new NotFoundException(nameof(Customer), customerId);
+
+        if (customer.LoyaltyPointsBalance < points)
+        {
+            throw new ConflictException($"Customer has only {customer.LoyaltyPointsBalance} points, cannot redeem {points}.");
+        }
+
+        await PostLoyaltyTransactionAsync(customer, LoyaltyTransactionType.Redeemed, -points, nameof(Domain.Sales.SaleHeader), saleHeaderId, "Paid for sale with loyalty points", null, null, cancellationToken);
     }
 
     public async Task<IReadOnlyList<LoyaltyTransactionDto>> GetHistoryAsync(long companyId, long customerId, CancellationToken cancellationToken = default)
@@ -89,7 +123,7 @@ public class LoyaltyService : ILoyaltyService
             throw new ConflictException($"Customer has only {customer.LoyaltyPointsBalance} points, cannot redeem {request.Points}.");
         }
 
-        await PostLoyaltyTransactionAsync(customer, LoyaltyTransactionType.Redeemed, -request.Points, null, null, request.Reason, null, cancellationToken);
+        await PostLoyaltyTransactionAsync(customer, LoyaltyTransactionType.Redeemed, -request.Points, null, null, request.Reason, null, null, cancellationToken);
     }
 
     public async Task AdjustPointsAsync(long companyId, long customerId, long adjustedByUserId, AdjustLoyaltyPointsRequest request, CancellationToken cancellationToken = default)
@@ -108,7 +142,7 @@ public class LoyaltyService : ILoyaltyService
 
         await _db.ExecuteInTransactionAsync(async () =>
         {
-            await PostLoyaltyTransactionAsync(customer, LoyaltyTransactionType.ManualAdjustment, request.PointsChange, null, null, request.Reason, adjustedByUserId, cancellationToken);
+            await PostLoyaltyTransactionAsync(customer, LoyaltyTransactionType.ManualAdjustment, request.PointsChange, null, null, request.Reason, adjustedByUserId, null, cancellationToken);
 
             _db.AuditLogs.Add(new AuditLog
             {
@@ -150,6 +184,59 @@ public class LoyaltyService : ILoyaltyService
         return new MembershipTierDto { Id = tier.Id, Name = tier.Name, MinimumPoints = tier.MinimumPoints, PointsMultiplier = tier.PointsMultiplier };
     }
 
+    public async Task<int> ExpirePointsAsync(long companyId, CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+
+        var expiredCustomerIds = 0;
+
+        var customerIdsWithExpiredBatches = await _db.LoyaltyTransactions
+            .Where(t => t.CompanyId == companyId && t.TransactionType == LoyaltyTransactionType.Earned
+                && !t.IsExpired && t.ExpiresAtUtc != null && t.ExpiresAtUtc <= now)
+            .Select(t => t.CustomerId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        foreach (var customerId in customerIdsWithExpiredBatches)
+        {
+            var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == customerId, cancellationToken);
+            if (customer is null)
+            {
+                continue;
+            }
+
+            var dueBatches = await _db.LoyaltyTransactions
+                .Where(t => t.CompanyId == companyId && t.CustomerId == customerId && t.TransactionType == LoyaltyTransactionType.Earned
+                    && !t.IsExpired && t.ExpiresAtUtc != null && t.ExpiresAtUtc <= now)
+                .ToListAsync(cancellationToken);
+
+            // v1 simplification: expires at the customer-balance level, capped at what
+            // they currently hold, rather than tracking each batch's remaining points
+            // through FIFO redemption consumption — see docs/project-state.md.
+            var pointsDue = dueBatches.Sum(b => b.PointsChange);
+            var pointsToExpire = Math.Min(pointsDue, customer.LoyaltyPointsBalance);
+
+            foreach (var batch in dueBatches)
+            {
+                batch.IsExpired = true;
+            }
+
+            if (pointsToExpire > 0)
+            {
+                await PostLoyaltyTransactionAsync(customer, LoyaltyTransactionType.Expired, -pointsToExpire,
+                    null, null, $"{dueBatches.Count} earned batch(es) reached their expiry date", null, null, cancellationToken);
+            }
+            else
+            {
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+
+            expiredCustomerIds++;
+        }
+
+        return expiredCustomerIds;
+    }
+
     private async Task PostLoyaltyTransactionAsync(
         Customer customer,
         LoyaltyTransactionType type,
@@ -158,6 +245,7 @@ public class LoyaltyService : ILoyaltyService
         long? referenceId,
         string? notes,
         long? userId,
+        DateTime? expiresAtUtc,
         CancellationToken cancellationToken)
     {
         _db.LoyaltyTransactions.Add(new LoyaltyTransaction
@@ -171,6 +259,7 @@ public class LoyaltyService : ILoyaltyService
             Notes = notes,
             CreatedByUserId = userId,
             CreatedAtUtc = DateTime.UtcNow,
+            ExpiresAtUtc = expiresAtUtc,
         });
 
         customer.LoyaltyPointsBalance += pointsChange;

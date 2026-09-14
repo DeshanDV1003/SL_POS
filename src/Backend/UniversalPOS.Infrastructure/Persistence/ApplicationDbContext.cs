@@ -55,6 +55,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<LoyaltyTransaction> LoyaltyTransactions => Set<LoyaltyTransaction>();
 
     public DbSet<Promotion> Promotions => Set<Promotion>();
+    public DbSet<Coupon> Coupons => Set<Coupon>();
 
     public DbSet<StockLedger> StockLedgers => Set<StockLedger>();
     public DbSet<StockOnHand> StockOnHands => Set<StockOnHand>();

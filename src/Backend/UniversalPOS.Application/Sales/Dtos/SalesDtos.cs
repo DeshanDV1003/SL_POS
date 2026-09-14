@@ -28,6 +28,9 @@ public class CreateSaleRequest
     public string? PurchaserName { get; set; }
     public string? PurchaserAddress { get; set; }
     public string? ClientIdempotencyKey { get; set; }
+
+    /// <summary>Optional customer-entered coupon code, applied as a flat reduction to GrandTotal. See Domain.Sales.Coupon.</summary>
+    public string? CouponCode { get; set; }
     public List<CreateSaleLineRequest> Lines { get; set; } = new();
     public List<CreateSalePaymentRequest> Payments { get; set; } = new();
 }
@@ -60,6 +63,7 @@ public class SaleReceiptDto
     public decimal DiscountTotal { get; set; }
     public decimal TaxTotal { get; set; }
     public decimal ServiceChargeTotal { get; set; }
+    public decimal CouponDiscountAmount { get; set; }
     public decimal GrandTotal { get; set; }
     public decimal ChangeDue { get; set; }
     public DateTime CompletedAtUtc { get; set; }

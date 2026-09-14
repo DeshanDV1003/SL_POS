@@ -31,4 +31,10 @@ public class LoyaltyTransaction
 
     public long? CreatedByUserId { get; set; }
     public DateTime CreatedAtUtc { get; set; }
+
+    /// <summary>Set only on Earned rows when the company has LoyaltyPointsExpiryMonths configured. Null means this batch never expires.</summary>
+    public DateTime? ExpiresAtUtc { get; set; }
+
+    /// <summary>Set once the expiry job has processed this Earned row, so it is never processed twice.</summary>
+    public bool IsExpired { get; set; }
 }

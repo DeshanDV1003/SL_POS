@@ -33,4 +33,16 @@ public class PromotionsController : ControllerBase
         var result = await _promotionService.CreatePromotionAsync(_currentUser.CompanyId, request, cancellationToken);
         return CreatedAtAction(nameof(GetPromotions), new { }, result);
     }
+
+    [HttpGet("~/api/v1/coupons")]
+    public async Task<IActionResult> GetCoupons(CancellationToken cancellationToken)
+        => Ok(await _promotionService.GetCouponsAsync(_currentUser.CompanyId, cancellationToken));
+
+    [HttpPost("~/api/v1/coupons")]
+    [RequirePermission(PermissionCodes.PromotionManage)]
+    public async Task<IActionResult> CreateCoupon([FromBody] CreateCouponRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _promotionService.CreateCouponAsync(_currentUser.CompanyId, request, cancellationToken);
+        return CreatedAtAction(nameof(GetCoupons), new { }, result);
+    }
 }

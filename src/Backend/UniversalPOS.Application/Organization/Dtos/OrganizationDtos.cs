@@ -8,6 +8,16 @@ public class CompanyDto
     public string DefaultCurrencyCode { get; set; } = string.Empty;
     public bool IsVatRegistered { get; set; }
     public bool IsActive { get; set; }
+    public decimal LoyaltyPointsPerCurrencyUnit { get; set; }
+    public decimal LoyaltyPointRedemptionValue { get; set; }
+    public int? LoyaltyPointsExpiryMonths { get; set; }
+}
+
+public class UpdateCompanyLoyaltySettingsRequest
+{
+    public decimal LoyaltyPointsPerCurrencyUnit { get; set; }
+    public decimal LoyaltyPointRedemptionValue { get; set; }
+    public int? LoyaltyPointsExpiryMonths { get; set; }
 }
 
 public class BranchDto

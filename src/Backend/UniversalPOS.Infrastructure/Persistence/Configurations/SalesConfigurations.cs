@@ -21,6 +21,7 @@ public class SaleHeaderConfiguration : IEntityTypeConfiguration<SaleHeader>
         builder.Property(s => s.TaxTotal).HasPrecision(18, 2);
         builder.Property(s => s.ServiceChargeTotal).HasPrecision(18, 2);
         builder.Property(s => s.GrandTotal).HasPrecision(18, 2);
+        builder.Property(s => s.CouponDiscountAmount).HasPrecision(18, 2);
 
         builder.HasIndex(s => new { s.BranchId, s.InvoiceNumber }).IsUnique().HasFilter("[InvoiceNumber] IS NOT NULL");
         builder.HasIndex(s => s.ClientIdempotencyKey).IsUnique().HasFilter("[ClientIdempotencyKey] IS NOT NULL");
@@ -97,5 +98,17 @@ public class PromotionConfiguration : IEntityTypeConfiguration<Promotion>
         builder.Property(p => p.MinQuantity).HasPrecision(18, 3);
 
         builder.HasIndex(p => new { p.CompanyId, p.IsActive });
+    }
+}
+
+public class CouponConfiguration : IEntityTypeConfiguration<Coupon>
+{
+    public void Configure(EntityTypeBuilder<Coupon> builder)
+    {
+        builder.Property(c => c.Code).HasMaxLength(30).IsRequired();
+        builder.Property(c => c.DiscountValue).HasPrecision(18, 2);
+        builder.Property(c => c.MinSaleAmount).HasPrecision(18, 2);
+
+        builder.HasIndex(c => new { c.CompanyId, c.Code }).IsUnique();
     }
 }

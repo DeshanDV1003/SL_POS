@@ -47,6 +47,10 @@ public class SaleHeader
     public decimal ServiceChargeTotal { get; set; }
     public decimal GrandTotal { get; set; }
 
+    /// <summary>Set when a coupon code was applied — a flat reduction to GrandTotal, already folded into it.</summary>
+    public long? CouponId { get; set; }
+    public decimal CouponDiscountAmount { get; set; }
+
     /// <summary>Deduplicates a retried/offline-synced submission of the same client-originated sale.</summary>
     public string? ClientIdempotencyKey { get; set; }
 

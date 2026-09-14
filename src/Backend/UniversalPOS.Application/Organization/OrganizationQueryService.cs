@@ -26,8 +26,43 @@ public class OrganizationQueryService : IOrganizationQueryService
                 DefaultCurrencyCode = c.DefaultCurrencyCode,
                 IsVatRegistered = c.IsVatRegistered,
                 IsActive = c.IsActive,
+                LoyaltyPointsPerCurrencyUnit = c.LoyaltyPointsPerCurrencyUnit,
+                LoyaltyPointRedemptionValue = c.LoyaltyPointRedemptionValue,
+                LoyaltyPointsExpiryMonths = c.LoyaltyPointsExpiryMonths,
             })
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<CompanyDto> UpdateCompanyLoyaltySettingsAsync(long companyId, UpdateCompanyLoyaltySettingsRequest request, CancellationToken cancellationToken = default)
+    {
+        if (request.LoyaltyPointsPerCurrencyUnit < 0 || request.LoyaltyPointRedemptionValue < 0 || request.LoyaltyPointsExpiryMonths is < 1)
+        {
+            throw new ValidationFailedException(new Dictionary<string, string[]>
+            {
+                ["loyaltySettings"] = new[] { "Rates cannot be negative and expiry months, if set, must be at least 1." },
+            });
+        }
+
+        var company = await _db.Companies.FirstOrDefaultAsync(c => c.Id == companyId, cancellationToken)
+            ?? throw new NotFoundException("Company", companyId);
+
+        company.LoyaltyPointsPerCurrencyUnit = request.LoyaltyPointsPerCurrencyUnit;
+        company.LoyaltyPointRedemptionValue = request.LoyaltyPointRedemptionValue;
+        company.LoyaltyPointsExpiryMonths = request.LoyaltyPointsExpiryMonths;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return new CompanyDto
+        {
+            Id = company.Id,
+            Name = company.Name,
+            LegalName = company.LegalName,
+            DefaultCurrencyCode = company.DefaultCurrencyCode,
+            IsVatRegistered = company.IsVatRegistered,
+            IsActive = company.IsActive,
+            LoyaltyPointsPerCurrencyUnit = company.LoyaltyPointsPerCurrencyUnit,
+            LoyaltyPointRedemptionValue = company.LoyaltyPointRedemptionValue,
+            LoyaltyPointsExpiryMonths = company.LoyaltyPointsExpiryMonths,
+        };
     }
 
     public async Task<IReadOnlyList<BranchDto>> GetBranchesAsync(long companyId, CancellationToken cancellationToken = default)

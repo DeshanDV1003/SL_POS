@@ -56,6 +56,7 @@ public interface IApplicationDbContext
     DbSet<LoyaltyTransaction> LoyaltyTransactions { get; }
 
     DbSet<Promotion> Promotions { get; }
+    DbSet<Coupon> Coupons { get; }
 
     DbSet<StockLedger> StockLedgers { get; }
     DbSet<StockOnHand> StockOnHands { get; }

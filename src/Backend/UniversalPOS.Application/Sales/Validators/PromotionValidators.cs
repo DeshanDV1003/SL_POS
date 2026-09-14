@@ -20,3 +20,16 @@ public class CreatePromotionRequestValidator : AbstractValidator<CreatePromotion
         RuleFor(x => x.EndDateUtc).GreaterThan(x => x.StartDateUtc).When(x => x.EndDateUtc.HasValue);
     }
 }
+
+public class CreateCouponRequestValidator : AbstractValidator<CreateCouponRequest>
+{
+    public CreateCouponRequestValidator()
+    {
+        RuleFor(x => x.Code).NotEmpty().MaximumLength(30);
+        RuleFor(x => x.DiscountValue).GreaterThan(0);
+        RuleFor(x => x.DiscountValue).LessThanOrEqualTo(100).When(x => x.DiscountType == PromotionDiscountType.Percentage)
+            .WithMessage("A percentage coupon's DiscountValue cannot exceed 100.");
+        RuleFor(x => x.MinSaleAmount).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.MaxRedemptions).GreaterThan(0).When(x => x.MaxRedemptions.HasValue);
+    }
+}
