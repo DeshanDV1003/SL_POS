@@ -58,3 +58,68 @@ public class DashboardSummaryDto
     public int LowStockProductCount { get; set; }
     public List<SalesByProductDto> TopProducts { get; set; } = new();
 }
+
+public class SalesTrendPointDto
+{
+    public DateOnly Date { get; set; }
+    public decimal NetSales { get; set; }
+    public int TransactionCount { get; set; }
+}
+
+public class BranchComparisonDto
+{
+    public long BranchId { get; set; }
+    public string BranchName { get; set; } = string.Empty;
+    public decimal NetSales { get; set; }
+    public int TransactionCount { get; set; }
+    public decimal AverageSaleValue { get; set; }
+}
+
+public class DiscountReportDto
+{
+    public decimal LineDiscountTotal { get; set; }
+    public decimal CouponDiscountTotal { get; set; }
+    public int SalesWithDiscountCount { get; set; }
+    public decimal AverageDiscountPerDiscountedSale { get; set; }
+    public List<SalesByProductDto> TopDiscountedProducts { get; set; } = new();
+}
+
+public class TaxByRateDto
+{
+    public decimal TaxRatePercentage { get; set; }
+    public decimal TaxableRevenue { get; set; }
+    public decimal TaxCollected { get; set; }
+}
+
+public class TaxReportDto
+{
+    public decimal TotalTaxCollected { get; set; }
+    public List<TaxByRateDto> ByRate { get; set; } = new();
+}
+
+public class KitchenStationPerformanceDto
+{
+    public long KitchenStationId { get; set; }
+    public string StationName { get; set; } = string.Empty;
+    public int TicketCount { get; set; }
+    public int CancelledTicketCount { get; set; }
+    public decimal? AveragePrepTimeMinutes { get; set; }
+}
+
+public class WaiterPerformanceDto
+{
+    public long WaiterUserId { get; set; }
+    public string WaiterName { get; set; } = string.Empty;
+    public int OrderCount { get; set; }
+    public int CancelledTicketCount { get; set; }
+    public decimal BilledRevenue { get; set; }
+}
+
+public class SlowMovingStockDto
+{
+    public long ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public decimal QuantityOnHand { get; set; }
+    public DateTime? LastSoldAtUtc { get; set; }
+    public int? DaysSinceLastSale { get; set; }
+}
