@@ -2,9 +2,19 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { findProductByBarcode, getProducts, type ProductSummary } from '../api/catalog';
-import { getTerminals } from '../api/organization';
+import { getTerminals, recordTerminalHeartbeat } from '../api/organization';
 import { checkout, deleteHeldBill, getHeldBills, getReceiptText, holdBill, recallBill, type HeldBillDto, type SaleReceipt } from '../api/sales';
+import { OfflineStatusBadge } from '../components/OfflineStatusBadge';
 import { useAuth } from '../context/AuthContext';
+import { enqueueOfflineSale } from '../offline/offlineSalesQueue';
+import { offlineSyncManager } from '../offline/syncManager';
+
+const HEARTBEAT_INTERVAL_MS = 60_000;
+
+/** True for a transport-level failure (offline, DNS, connection reset) — apiFetch only throws ApiError for an actual HTTP response, so anything else reaching here means the request never got one. */
+function isNetworkFailure(err: unknown): boolean {
+  return !(err instanceof ApiError);
+}
 
 const currency = new Intl.NumberFormat('en-LK', { style: 'currency', currency: 'LKR' });
 
@@ -28,6 +38,7 @@ export function CheckoutPage() {
   const [printedReceipt, setPrintedReceipt] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [heldBills, setHeldBills] = useState<HeldBillDto[]>([]);
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -37,6 +48,18 @@ export function CheckoutPage() {
     });
     refreshHeldBills();
   }, [branchId]);
+
+  // Proves this terminal is online so a manager reviewing terminal status isn't
+  // guessing from the last login — see docs/architecture.md §10.
+  useEffect(() => {
+    if (!branchId || !terminalId) return;
+    const beat = () => {
+      if (navigator.onLine) recordTerminalHeartbeat(branchId, terminalId).catch(() => {});
+    };
+    beat();
+    const handle = setInterval(beat, HEARTBEAT_INTERVAL_MS);
+    return () => clearInterval(handle);
+  }, [branchId, terminalId]);
 
   function refreshHeldBills() {
     if (branchId) getHeldBills(branchId).then(setHeldBills).catch(() => {});
@@ -93,21 +116,51 @@ export function CheckoutPage() {
   async function handleCheckout() {
     if (!branchId || !terminalId || cart.length === 0) return;
     setError(null);
+    setOfflineNotice(null);
     setIsSubmitting(true);
+
+    const tendered = Number(cashTendered || estimatedTotal);
+    const saleRequest = {
+      terminalId,
+      lines: cart.map((l) => ({ productId: l.product.id, quantity: l.quantity, discountPercentage: l.discountPercentage })),
+      payments: [{ method: 'Cash' as const, amount: tendered }],
+    };
+
     try {
-      const tendered = Number(cashTendered || estimatedTotal);
-      const result = await checkout(branchId, {
-        terminalId,
-        lines: cart.map((l) => ({ productId: l.product.id, quantity: l.quantity, discountPercentage: l.discountPercentage })),
-        payments: [{ method: 'Cash', amount: tendered }],
-      });
+      // Card/digital payments require the gateway to be reachable and so are
+      // always online-required (docs/architecture.md §10); this screen only ever
+      // charges Cash, so every checkout here is eligible to queue offline if the
+      // network is down — never attempt a live request when we already know
+      // we're offline.
+      if (!navigator.onLine) {
+        await queueOffline(branchId, saleRequest);
+        return;
+      }
+
+      const result = await checkout(branchId, saleRequest);
       setReceipt(result);
       setCart([]);
       setCashTendered('');
     } catch (err) {
+      if (isNetworkFailure(err)) {
+        await queueOffline(branchId, saleRequest);
+        return;
+      }
       setError(err instanceof ApiError ? err.message : 'Checkout failed.');
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function queueOffline(branchId: number, saleRequest: { terminalId: number; lines: { productId: number; quantity: number; discountPercentage: number }[]; payments: { method: 'Cash'; amount: number }[] }) {
+    try {
+      await enqueueOfflineSale(branchId, saleRequest);
+      await offlineSyncManager.notifyEnqueued();
+      setCart([]);
+      setCashTendered('');
+      setOfflineNotice('Sale saved on this device — it will sync to the server automatically once the connection is back.');
+    } catch {
+      setError('Could not save this sale offline either. Please try again.');
     }
   }
 
@@ -149,6 +202,25 @@ export function CheckoutPage() {
     } catch {
       setError('Could not recall this bill.');
     }
+  }
+
+  if (offlineNotice) {
+    return (
+      <div className="dashboard">
+        <header className="dashboard-header">
+          <h1>Sale Saved Offline</h1>
+          <Link to="/">Back to dashboard</Link>
+        </header>
+        <div className="receipt-card">
+          <p>{offlineNotice}</p>
+          <p style={{ color: 'var(--color-muted)', fontSize: '0.9rem' }}>
+            No invoice number is assigned yet — the server assigns it only once this sale syncs, so the invoice sequence never has a gap.
+          </p>
+          <OfflineStatusBadge />
+          <button onClick={() => setOfflineNotice(null)} className="checkout-button">New Sale</button>
+        </div>
+      </div>
+    );
   }
 
   if (receipt) {
@@ -193,6 +265,8 @@ export function CheckoutPage() {
           <h1>Checkout</h1>
           <Link to="/">Back to dashboard</Link>
         </header>
+
+        <OfflineStatusBadge />
 
         <form onSubmit={handleScanSubmit} className="scan-form">
           <input

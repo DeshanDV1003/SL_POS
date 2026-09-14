@@ -489,3 +489,37 @@ body {
   padding: 0.25rem 0.7rem;
   font-size: 0.8rem;
 }
+
+.offline-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+}
+
+.offline-badge-offline {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.offline-badge-online {
+  background: #fff8e6;
+  color: #7a5b00;
+}
+
+.offline-badge-failed {
+  font-weight: 600;
+}
+
+.offline-badge-retry {
+  margin-left: auto;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.85rem;
+}

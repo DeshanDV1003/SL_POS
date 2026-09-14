@@ -18,6 +18,12 @@ export interface CreateSaleRequest {
   customerId?: number;
   lines: SaleLineRequest[];
   payments: SalePaymentRequest[];
+  /** True when this sale is being replayed from the offline queue rather than taken live — see docs/architecture.md §10. Requires clientIdempotencyKey. */
+  isOfflineSync?: boolean;
+  /** Required when isOfflineSync is true, so a retried sync of the same queued sale never double-books it. */
+  clientIdempotencyKey?: string;
+  /** When the sale actually happened on the terminal — only meaningful when isOfflineSync is true. */
+  clientCreatedAtUtc?: string;
 }
 
 export interface SaleLineDto {
@@ -41,6 +47,7 @@ export interface SaleReceipt {
   serviceChargeTotal: number;
   grandTotal: number;
   changeDue: number;
+  isOfflineSync: boolean;
   completedAtUtc: string;
   lines: SaleLineDto[];
   payments: { method: string; amount: number; providerReference: string | null }[];

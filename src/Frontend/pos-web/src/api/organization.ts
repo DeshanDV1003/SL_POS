@@ -12,3 +12,8 @@ export function getBranches(companyId: number): Promise<Branch[]> {
 export function getTerminals(branchId: number): Promise<Terminal[]> {
   return apiFetch<Terminal[]>(`/api/v1/branches/${branchId}/terminals`);
 }
+
+/** Proves this terminal is online right now — see docs/architecture.md §10. Called periodically while connected, not on every request. */
+export function recordTerminalHeartbeat(branchId: number, terminalId: number): Promise<void> {
+  return apiFetch<void>(`/api/v1/branches/${branchId}/terminals/${terminalId}/heartbeat`, { method: 'POST' });
+}

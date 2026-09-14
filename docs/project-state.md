@@ -343,12 +343,37 @@ session out of auto mode.
   correctly but would have silently never reached a real, already-deployed
   database — now fixed for all of them going forward.
 
-  **Explicitly out of scope this pass, by the user's choice:** the frontend offline
-  queue itself — IndexedDB-backed local storage of unsynced sales, a service worker,
-  background-sync retry with exponential backoff, and the "held while offline"
-  affordance in the POS UI (all real work, per docs/architecture.md §10) needs a
-  real browser to verify with the same end-to-end rigor as everything above, so it
-  was deliberately deferred rather than built without that proof.
+- **Phase 11 — Offline + Synchronization (frontend layer)**: picked back up after the
+  backend-only pass above. `src/Frontend/pos-web/src/offline/` is a real,
+  dependency-free IndexedDB-backed queue (`db.ts`, `offlineSalesQueue.ts`) and a
+  singleton background sync manager (`syncManager.ts`) that processes queued sales
+  strictly in creation order — so the server's sequential invoice numbering assigns
+  numbers in the order sales actually happened, not the order the network happened
+  to let them through — halting the whole pass on a network failure but marking
+  just one sale `failed` (for manual review) on a real server rejection, so one bad
+  item never blocks the rest. `CheckoutPage` (the only screen that charges Cash —
+  card/digital stay online-required per §10) queues offline instead of erroring
+  whenever `navigator.onLine` is false or the live checkout request throws a
+  transport-level failure (`!(err instanceof ApiError)`, since `apiFetch` only ever
+  throws `ApiError` for an actual HTTP response); a "Sale Saved Offline" screen and
+  an `OfflineStatusBadge` (pending/failed counts, a manual "Sync now") replace a
+  hard error. `recordTerminalHeartbeat` is now actually called from `CheckoutPage`
+  every 60s while online. `public/sw.js` is a small hand-rolled service worker
+  (no workbox/vite-plugin-pwa — one cache, one fetch strategy doesn't need a
+  library) that caches the app shell so the page itself can still load offline; it
+  deliberately never intercepts `/api/*` traffic, leaving that entirely to the
+  IndexedDB queue above, and only registers in production builds (a dev-mode
+  service worker would fight Vite's HMR websocket).
+
+  **How this was verified, honestly:** `tsc -b` and `vite build` both pass cleanly,
+  `oxlint` shows no new warnings from any of this code, and the dev server serves
+  the updated bundle. What was **not** verified is true browser offline behavior —
+  DevTools network throttling, watching IndexedDB fill and drain, confirming the
+  service worker actually serves a cached shell with the network off — because
+  driving a real browser isn't something this session can do. That verification is
+  the user's to run: open the app, DevTools → Network → Offline, complete a cash
+  sale (expect the "Sale Saved Offline" screen), go back online, and confirm the
+  sale appears server-side with a real invoice number.
 
 ## Solution Layout
 ```
@@ -446,20 +471,24 @@ UI yet — real, tested APIs without a screen, same tradeoff as every prior gap-
 Branch-comparison has no chart UI either — it is a real, tested JSON endpoint a chart
 would consume, not a rendered chart.
 
-**Within Phase 11, explicitly deferred (by the user's own choice this pass):** the
-frontend offline queue — IndexedDB-backed local storage of unsynced sales, a service
-worker, background-sync retry with exponential backoff, and a "syncing.../offline"
-UI affordance. The backend's sync contract (`IsOfflineSync` + mandatory
-`ClientIdempotencyKey` + `ClientCreatedAtUtc`) is ready for that frontend work to
-target. Also still open: `StockReconciliationFlag` has no frontend screen (real,
-tested API without one, same tradeoff as every other gap-fill); cross-branch stock
-transfer approval and catalog/price sync are already online-required by design
-(§10), not offline-capable gaps.
+**Within Phase 11, still remaining now that both layers are built:** true browser
+verification of the offline queue was not performed by this session (see the
+Completed Modules entry above for exactly what was and wasn't verified, and the
+steps to do it) — that's the single biggest open item. `StockReconciliationFlag`
+still has no frontend screen (real, tested API without one, same tradeoff as every
+other gap-fill). Background Sync API (letting the browser retry even when the tab
+isn't focused) was not used — the sync manager instead relies on the page being
+open plus an `online` event listener and a 30s timer, which covers the realistic
+"cashier's tab stays open all shift" case but not "closed the tab while offline."
+The offline queue only covers Cash retail checkout (`CheckoutPage`) — KOT/BOT
+creation/status updates, held-bill create/recall, and restaurant billing are all
+listed as offline-capable in docs/architecture.md §10 but weren't wired into this
+queue. Cross-branch stock transfer approval and catalog/price sync remain
+online-required by design (§10), not offline-capable gaps.
 
 **Everything after Phase 11:** Hardware abstraction implementations (`IReceiptPrinter`,
 `IKitchenPrinter`, `ICashDrawer`, `IBarcodeScanner`, `ICustomerDisplay`, `IScale`),
-real fiscal/e-invoice provider, real payment gateway integration, and the frontend
-offline queue above.
+real fiscal/e-invoice provider, and real payment gateway integration.
 
 ## Architecture Decisions Locked In (see docs/architecture.md for full rationale)
 - Modular monolith, not microservices.
@@ -471,7 +500,11 @@ offline queue above.
   business logic, because Sri Lanka's e-invoicing rollout is an active 2026 program.
 
 ## Next Task
-Phase 11's backend layer is done (offline-sync sale metadata, stock-reconciliation
-flags, terminal heartbeat). Awaiting direction on what's next: the deferred frontend
-offline queue for this same phase, or moving on to Phase 12 (Hardware Abstraction)
-per docs/architecture.md §11.
+Phase 11 is now done on both layers (backend: offline-sync sale metadata,
+stock-reconciliation flags, terminal heartbeat; frontend: IndexedDB offline queue,
+background sync manager, service worker app-shell caching, wired into
+CheckoutPage). The user should manually verify the browser-side offline behavior
+(see the Completed Modules entry above for the exact steps) before treating it as
+fully proven. After that, Phase 12 (Hardware Abstraction) is next per
+docs/architecture.md §11, or extending the offline queue to KOT/BOT and held-bill
+flows per the still-remaining gaps above.
