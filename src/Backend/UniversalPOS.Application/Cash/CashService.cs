@@ -144,7 +144,12 @@ public class CashService : ICashService
             return ToDto(existing);
         }
 
-        var dayStart = businessDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        // The "business day" boundary is configurable per branch (BusinessDayCutoffHour,
+        // default 0 = plain midnight): a branch trading past midnight can set this so a
+        // 1am sale still counts as the previous day's Z-report rather than starting a
+        // new one.
+        var cutoffHour = await _db.Branches.Where(b => b.Id == branchId).Select(b => b.BusinessDayCutoffHour).FirstOrDefaultAsync(cancellationToken);
+        var dayStart = businessDate.ToDateTime(new TimeOnly(cutoffHour, 0), DateTimeKind.Utc);
         var dayEnd = dayStart.AddDays(1);
 
         var completedSales = await _db.SaleHeaders
@@ -206,6 +211,35 @@ public class CashService : ICashService
         await _db.SaveChangesAsync(cancellationToken);
 
         return ToDto(report);
+    }
+
+    public async Task<IReadOnlyList<DayEndReportDto>> GetDayEndReportHistoryAsync(long companyId, long branchId, CancellationToken cancellationToken = default)
+    {
+        return await _db.DayEndReports
+            .Where(r => r.CompanyId == companyId && r.BranchId == branchId)
+            .OrderByDescending(r => r.BusinessDate)
+            .Select(r => ToDto(r))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task OpenCashDrawerAsync(long companyId, long branchId, long? terminalId, long userId, CancellationToken cancellationToken = default)
+    {
+        // No physical drawer exists in this environment (that's Phase 12's hardware
+        // abstraction) — but the permission-gated action and its audit trail are real:
+        // a manager opening the drawer outside of a sale is exactly the kind of event
+        // a business wants a durable record of, hardware or not.
+        _db.AuditLogs.Add(new Domain.Auditing.AuditLog
+        {
+            CompanyId = companyId,
+            BranchId = branchId,
+            TerminalId = terminalId,
+            UserId = userId,
+            ActionCode = "Cash.DrawerOpen",
+            EntityType = "Terminal",
+            EntityId = terminalId?.ToString() ?? "unknown",
+            CreatedAtUtc = DateTime.UtcNow,
+        });
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
     private static ShiftDto ToDto(CashierShift s) => new()

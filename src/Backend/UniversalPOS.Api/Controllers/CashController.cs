@@ -70,5 +70,18 @@ public class CashController : ControllerBase
     public async Task<IActionResult> FinalizeDayEndReport(long branchId, long reportId, CancellationToken cancellationToken)
         => Ok(await _cashService.FinalizeDayEndReportAsync(_currentUser.CompanyId, reportId, cancellationToken));
 
+    [HttpGet("day-end-report/history")]
+    [RequirePermission(PermissionCodes.ReportsViewFinancial)]
+    public async Task<IActionResult> GetDayEndReportHistory(long branchId, CancellationToken cancellationToken)
+        => Ok(await _cashService.GetDayEndReportHistoryAsync(_currentUser.CompanyId, branchId, cancellationToken));
+
+    [HttpPost("cash-drawer/open")]
+    [RequirePermission(PermissionCodes.CashDrawerOpen)]
+    public async Task<IActionResult> OpenCashDrawer(long branchId, CancellationToken cancellationToken)
+    {
+        await _cashService.OpenCashDrawerAsync(_currentUser.CompanyId, branchId, _currentUser.TerminalId, RequireUserId(), cancellationToken);
+        return NoContent();
+    }
+
     private long RequireUserId() => _currentUser.UserId ?? throw new ForbiddenException("No authenticated user context.");
 }

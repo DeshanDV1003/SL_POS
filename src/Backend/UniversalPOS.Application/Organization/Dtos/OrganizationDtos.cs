@@ -18,7 +18,15 @@ public class BranchDto
     public string Code { get; set; } = string.Empty;
     public string? City { get; set; }
     public string BusinessTypeFlags { get; set; } = string.Empty;
+    public bool RequireOpenShiftForSale { get; set; }
+    public int BusinessDayCutoffHour { get; set; }
     public bool IsActive { get; set; }
+}
+
+public class UpdateBranchCashSettingsRequest
+{
+    public bool RequireOpenShiftForSale { get; set; }
+    public int BusinessDayCutoffHour { get; set; }
 }
 
 public class TerminalDto

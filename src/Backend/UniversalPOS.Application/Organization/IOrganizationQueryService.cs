@@ -6,5 +6,6 @@ public interface IOrganizationQueryService
 {
     Task<IReadOnlyList<CompanyDto>> GetCompaniesAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BranchDto>> GetBranchesAsync(long companyId, CancellationToken cancellationToken = default);
+    Task<BranchDto> UpdateBranchCashSettingsAsync(long companyId, long branchId, UpdateBranchCashSettingsRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<TerminalDto>> GetTerminalsAsync(long branchId, CancellationToken cancellationToken = default);
 }

@@ -229,6 +229,36 @@ session out of auto mode.
   table with "Sequence contains no matching element." Fixed by seeding 20 tables — a
   more realistic count for an actual restaurant anyway, not just a test workaround.
 
+- **Phase 8 gap-fill — mandatory shift-to-sell, business-day cutoff, report history,
+  cash-drawer audit action**: `Branch.RequireOpenShiftForSale` (off by default, so
+  existing/simpler deployments aren't forced into shift discipline) makes
+  `CheckoutAsync` throw a 409 when the cashier has no open shift on the terminal —
+  verified directly: the same checkout request that gets rejected with the flag on
+  succeeds once a shift is opened, and is unaffected when the flag is off.
+  `Branch.BusinessDayCutoffHour` (0-23, validated) shifts the Z-report's day boundary
+  away from plain UTC midnight — verified by setting the cutoff to the current hour
+  and confirming a sale made right after is attributed to *today's* business date but
+  not yet visible under *tomorrow's* (whose window hasn't opened). Both settings are
+  updated via `PUT /branches/{id}/cash-settings`, gated by `branch.manage` (verified:
+  a manager without it gets 403). `GET /branches/{id}/day-end-report/history` lists
+  all previously generated reports for a branch, newest business date first.
+  `POST /branches/{id}/cash-drawer/open`, gated by `cash.drawer.open`, writes a real
+  `AuditLog` row (`ActionCode = "Cash.DrawerOpen"`) — honestly, there's still no
+  physical drawer to trigger (that's Phase 12's hardware abstraction), but the
+  permission-gated action and its audit trail are real and verified directly against
+  the database. 69 integration tests + 17 unit tests, all passing.
+
+  One real test-isolation bug found via testing (not a production bug): a new test
+  that opened a cashier shift with `admin.lfm` and didn't close it left that user
+  permanently "busy" — `CashierShift`'s open-shift constraint is enforced globally per
+  user, not per-branch or per-terminal — which broke unrelated `CashEndpointTests`
+  cases later in the same shared test-collection database that also use `admin.lfm`
+  to open a shift. Fixed by closing the shift in a `finally` block, matching the
+  pattern already used by the well-behaved existing tests. Separately, ad-hoc manual
+  `curl` verification against the shared `UniversalPosTests` LocalDB left behind a
+  stale invoice-number sequence collision; recreating the test database (migrations +
+  seed re-run automatically on next startup) cleared it — not a product bug.
+
 ## Solution Layout
 ```
 UniversalPOS.slnx
@@ -294,14 +324,13 @@ but hasn't yet). No frontend UI was added for transfer/merge/split/standalone-or
 ticket-cancel — real, tested APIs without a screen, same tradeoff as Phase 5's
 gap-fill.
 
-**Within Phase 8, explicitly deferred:** a shift is not mandatory to complete a sale
-(checkout works with or without one open — a real deployment likely wants to require
-it), `CashDrawerOpen` permission exists but nothing calls it (no hardware-drawer
-trigger endpoint yet — that's Phase 12's hardware abstraction), the "business day"
-boundary for a Z-report is a plain UTC calendar date rather than a configurable
-cutoff time (a sale at 12:30am would fall on the next calendar day even if the
-business considers that "still last night"), and there's no report listing/history
-endpoint (only get-by-date and finalize).
+**Within Phase 8, still remaining after the gap-fill:** the cash-drawer-open action is
+a real, permission-gated, audited endpoint, but still has no actual hardware to
+trigger (that's Phase 12's hardware abstraction). The PurchaseOrder-style simple
+counter used for invoice numbers is still not a concurrency-safe sequence generator.
+No frontend UI was added for the new branch cash-settings screen, day-end-report
+history list, or a "open drawer" button — real, tested APIs without a screen, same
+tradeoff as prior gap-fills.
 
 **Within Phase 9, explicitly deferred:** redemption is a standalone action (deduct
 points, e.g. for a physical reward) and does NOT yet apply as a discount/payment
@@ -336,8 +365,9 @@ real fiscal/e-invoice provider, real payment gateway integration, and the Phase
   business logic, because Sri Lanka's e-invoicing rollout is an active 2026 program.
 
 ## Next Task
-Phase 5, 6, and 7 gap-fills are done. The user has asked for 8, 9, and 10 gap-fill
-next, in that order: (a) Phase 8 (mandatory shift-to-sell, configurable business-day
-cutoff), (b) Phase 9 (pay-with-points at checkout, points expiry job, coupon codes),
-(c) Phase 10 (trend charts, exports, kitchen-performance reports). After that, Phase
-11 (Offline + Synchronization) is the next new phase.
+Phase 5, 6, 7, and 8 gap-fills are done. The user has asked for 9 and 10 gap-fill
+next, in that order: (a) Phase 9 (pay-with-points at checkout, points expiry job,
+per-company-configurable loyalty earn rate, coupon codes), (b) Phase 10 (trend/
+branch-comparison charts, CSV/PDF export, kitchen/waiter-performance reports,
+separate discount/tax report views, dead/slow-moving stock analysis). After that,
+Phase 11 (Offline + Synchronization) is the next new phase.

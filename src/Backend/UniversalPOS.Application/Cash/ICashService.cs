@@ -12,4 +12,7 @@ public interface ICashService
 
     Task<DayEndReportDto> GenerateDayEndReportAsync(long companyId, long branchId, DateOnly businessDate, long userId, CancellationToken cancellationToken = default);
     Task<DayEndReportDto> FinalizeDayEndReportAsync(long companyId, long reportId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<DayEndReportDto>> GetDayEndReportHistoryAsync(long companyId, long branchId, CancellationToken cancellationToken = default);
+
+    Task OpenCashDrawerAsync(long companyId, long branchId, long? terminalId, long userId, CancellationToken cancellationToken = default);
 }

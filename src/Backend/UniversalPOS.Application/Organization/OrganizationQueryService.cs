@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using UniversalPOS.Application.Common.Exceptions;
 using UniversalPOS.Application.Common.Interfaces;
 using UniversalPOS.Application.Organization.Dtos;
 
@@ -42,9 +43,42 @@ public class OrganizationQueryService : IOrganizationQueryService
                 Code = b.Code,
                 City = b.City,
                 BusinessTypeFlags = b.BusinessTypeFlags.ToString(),
+                RequireOpenShiftForSale = b.RequireOpenShiftForSale,
+                BusinessDayCutoffHour = b.BusinessDayCutoffHour,
                 IsActive = b.IsActive,
             })
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<BranchDto> UpdateBranchCashSettingsAsync(long companyId, long branchId, UpdateBranchCashSettingsRequest request, CancellationToken cancellationToken = default)
+    {
+        if (request.BusinessDayCutoffHour is < 0 or > 23)
+        {
+            throw new ValidationFailedException(new Dictionary<string, string[]>
+            {
+                [nameof(request.BusinessDayCutoffHour)] = new[] { "Must be between 0 and 23." },
+            });
+        }
+
+        var branch = await _db.Branches.FirstOrDefaultAsync(b => b.Id == branchId && b.CompanyId == companyId, cancellationToken)
+            ?? throw new NotFoundException("Branch", branchId);
+
+        branch.RequireOpenShiftForSale = request.RequireOpenShiftForSale;
+        branch.BusinessDayCutoffHour = request.BusinessDayCutoffHour;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return new BranchDto
+        {
+            Id = branch.Id,
+            CompanyId = branch.CompanyId,
+            Name = branch.Name,
+            Code = branch.Code,
+            City = branch.City,
+            BusinessTypeFlags = branch.BusinessTypeFlags.ToString(),
+            RequireOpenShiftForSale = branch.RequireOpenShiftForSale,
+            BusinessDayCutoffHour = branch.BusinessDayCutoffHour,
+            IsActive = branch.IsActive,
+        };
     }
 
     public async Task<IReadOnlyList<TerminalDto>> GetTerminalsAsync(long branchId, CancellationToken cancellationToken = default)

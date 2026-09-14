@@ -96,14 +96,20 @@ public class SalesService : ISalesService
             .Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToList();
         var taxRates = await _db.TaxRates.Where(t => taxRateIds.Contains(t.Id)).ToDictionaryAsync(t => t.Id, cancellationToken);
 
-        // Attaching the cashier's open shift is best-effort, not mandatory: a shift is
-        // not currently required to complete a sale (see docs/project-state.md), so a
-        // sale with no open shift simply reports with CashierShiftId null rather than
-        // being blocked.
+        // Attaching the cashier's open shift is normally best-effort — a shift is not
+        // required to complete a sale unless the branch has opted into
+        // RequireOpenShiftForSale (off by default, see docs/project-state.md), in
+        // which case checkout without one is rejected outright rather than silently
+        // recording CashierShiftId as null.
         var openShiftId = await _db.CashierShifts
             .Where(s => s.TerminalId == request.TerminalId && s.CashierUserId == cashierUserId && s.Status == Domain.Cash.ShiftStatus.Open)
             .Select(s => (long?)s.Id)
             .FirstOrDefaultAsync(cancellationToken);
+
+        if (branch.RequireOpenShiftForSale && !openShiftId.HasValue)
+        {
+            throw new ConflictException("This branch requires an open cashier shift before a sale can be completed. Open a shift first.");
+        }
 
         var sale = new SaleHeader
         {
