@@ -45,6 +45,29 @@ public class RestaurantController : ControllerBase
     public async Task<IActionResult> AddLines(long branchId, long orderId, [FromBody] List<AddOrderLineRequest> lines, CancellationToken cancellationToken)
         => Ok(await _restaurantService.AddOrderLinesAsync(_currentUser.CompanyId, orderId, lines, cancellationToken));
 
+    [HttpPost("orders/standalone")]
+    [RequirePermission(PermissionCodes.OrderCreate)]
+    public async Task<IActionResult> CreateStandaloneOrder(long branchId, [FromBody] CreateStandaloneOrderRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _restaurantService.CreateStandaloneOrderAsync(_currentUser.CompanyId, branchId, RequireUserId(), request, cancellationToken);
+        return CreatedAtAction(nameof(GetOrder), new { branchId, orderId = result.Id }, result);
+    }
+
+    [HttpPost("orders/{orderId:long}/transfer-table")]
+    [RequirePermission(PermissionCodes.OrderCreate)]
+    public async Task<IActionResult> TransferTable(long branchId, long orderId, [FromBody] TransferTableRequest request, CancellationToken cancellationToken)
+        => Ok(await _restaurantService.TransferTableAsync(_currentUser.CompanyId, orderId, RequireUserId(), request, cancellationToken));
+
+    [HttpPost("orders/{orderId:long}/merge")]
+    [RequirePermission(PermissionCodes.OrderCreate)]
+    public async Task<IActionResult> MergeOrders(long branchId, long orderId, [FromBody] MergeOrdersRequest request, CancellationToken cancellationToken)
+        => Ok(await _restaurantService.MergeOrdersAsync(_currentUser.CompanyId, orderId, RequireUserId(), request, cancellationToken));
+
+    [HttpPost("orders/{orderId:long}/split")]
+    [RequirePermission(PermissionCodes.OrderCreate)]
+    public async Task<IActionResult> SplitOrder(long branchId, long orderId, [FromBody] SplitOrderRequest request, CancellationToken cancellationToken)
+        => Ok(await _restaurantService.SplitOrderAsync(_currentUser.CompanyId, branchId, orderId, RequireUserId(), request, cancellationToken));
+
     [HttpPost("orders/{orderId:long}/send-to-kitchen")]
     [RequirePermission(PermissionCodes.OrderCreate)]
     public async Task<IActionResult> SendToKitchen(long branchId, long orderId, CancellationToken cancellationToken)
@@ -70,6 +93,11 @@ public class RestaurantController : ControllerBase
     [RequirePermission(PermissionCodes.KdsUpdate)]
     public async Task<IActionResult> UpdateTicketStatus(long branchId, long ticketId, [FromBody] UpdateTicketStatusRequest request, CancellationToken cancellationToken)
         => Ok(await _restaurantService.UpdateTicketStatusAsync(_currentUser.CompanyId, ticketId, request, cancellationToken));
+
+    [HttpPost("tickets/{ticketId:long}/cancel")]
+    [RequirePermission(PermissionCodes.KotCancel)]
+    public async Task<IActionResult> CancelTicket(long branchId, long ticketId, [FromBody] CancelTicketRequest request, CancellationToken cancellationToken)
+        => Ok(await _restaurantService.CancelTicketAsync(_currentUser.CompanyId, branchId, _currentUser.TerminalId, RequireUserId(), ticketId, request, cancellationToken));
 
     private long RequireUserId() => _currentUser.UserId ?? throw new ForbiddenException("No authenticated user context.");
 }

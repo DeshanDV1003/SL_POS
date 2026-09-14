@@ -5,6 +5,7 @@ using UniversalPOS.Application.Common.Interfaces;
 using UniversalPOS.Application.Restaurant.Dtos;
 using UniversalPOS.Application.Sales;
 using UniversalPOS.Application.Sales.Dtos;
+using UniversalPOS.Domain.Auditing;
 using UniversalPOS.Domain.Restaurant;
 
 namespace UniversalPOS.Application.Restaurant;
@@ -14,12 +15,21 @@ public class RestaurantService : IRestaurantService
     private readonly IApplicationDbContext _db;
     private readonly ISalesService _salesService;
     private readonly IValidator<AddOrderLineRequest> _lineValidator;
+    private readonly IValidator<CancelTicketRequest> _cancelTicketValidator;
+    private readonly IValidator<CreateStandaloneOrderRequest> _standaloneOrderValidator;
 
-    public RestaurantService(IApplicationDbContext db, ISalesService salesService, IValidator<AddOrderLineRequest> lineValidator)
+    public RestaurantService(
+        IApplicationDbContext db,
+        ISalesService salesService,
+        IValidator<AddOrderLineRequest> lineValidator,
+        IValidator<CancelTicketRequest> cancelTicketValidator,
+        IValidator<CreateStandaloneOrderRequest> standaloneOrderValidator)
     {
         _db = db;
         _salesService = salesService;
         _lineValidator = lineValidator;
+        _cancelTicketValidator = cancelTicketValidator;
+        _standaloneOrderValidator = standaloneOrderValidator;
     }
 
     public async Task<IReadOnlyList<FloorDto>> GetFloorsAsync(long companyId, long branchId, CancellationToken cancellationToken = default)
@@ -90,6 +100,172 @@ public class RestaurantService : IRestaurantService
         await _db.SaveChangesAsync(cancellationToken);
 
         return await GetOrderAsync(companyId, order.Id, cancellationToken);
+    }
+
+    public async Task<OrderDto> CreateStandaloneOrderAsync(long companyId, long branchId, long userId, CreateStandaloneOrderRequest request, CancellationToken cancellationToken = default)
+    {
+        await _standaloneOrderValidator.ValidateAndThrowAsync(request, cancellationToken);
+
+        if (request.OrderType == OrderType.DineIn)
+        {
+            throw new ConflictException("A dine-in order must be opened against a table — use the open-table endpoint instead.");
+        }
+
+        var order = new Order
+        {
+            CompanyId = companyId,
+            BranchId = branchId,
+            OrderType = request.OrderType,
+            Status = OrderStatus.Open,
+            CreatedByUserId = userId,
+            CreatedAtUtc = DateTime.UtcNow,
+            ContactPhone = request.ContactPhone,
+            DeliveryAddress = request.DeliveryAddress,
+            DeliveryFee = request.DeliveryFee,
+        };
+        _db.Orders.Add(order);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return await GetOrderAsync(companyId, order.Id, cancellationToken);
+    }
+
+    public async Task<OrderDto> TransferTableAsync(long companyId, long orderId, long userId, TransferTableRequest request, CancellationToken cancellationToken = default)
+    {
+        var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.CompanyId == companyId, cancellationToken)
+            ?? throw new NotFoundException(nameof(Order), orderId);
+
+        if (order.Status != OrderStatus.Open || !order.TableSessionId.HasValue)
+        {
+            throw new ConflictException($"Order {orderId} is not an open, seated dine-in order and cannot be transferred.");
+        }
+
+        var session = await _db.TableSessions.FirstAsync(s => s.Id == order.TableSessionId.Value, cancellationToken);
+        var oldTable = await _db.DiningTables.FirstAsync(t => t.Id == session.TableId, cancellationToken);
+
+        var newTable = await _db.DiningTables.FirstOrDefaultAsync(t => t.Id == request.NewTableId && t.CompanyId == companyId, cancellationToken)
+            ?? throw new NotFoundException(nameof(DiningTable), request.NewTableId);
+
+        if (newTable.Id == oldTable.Id)
+        {
+            throw new ConflictException("Cannot transfer a table to itself.");
+        }
+        if (newTable.Status != TableStatus.Available)
+        {
+            throw new ConflictException($"Table '{newTable.Name}' is not available ({newTable.Status}).");
+        }
+
+        oldTable.Status = TableStatus.Available;
+        newTable.Status = TableStatus.Occupied;
+        session.TableId = newTable.Id;
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return await GetOrderAsync(companyId, orderId, cancellationToken);
+    }
+
+    public async Task<OrderDto> MergeOrdersAsync(long companyId, long sourceOrderId, long userId, MergeOrdersRequest request, CancellationToken cancellationToken = default)
+    {
+        if (sourceOrderId == request.TargetOrderId)
+        {
+            throw new ConflictException("Cannot merge an order into itself.");
+        }
+
+        var source = await _db.Orders.Include(o => o.Lines).FirstOrDefaultAsync(o => o.Id == sourceOrderId && o.CompanyId == companyId, cancellationToken)
+            ?? throw new NotFoundException(nameof(Order), sourceOrderId);
+        var target = await _db.Orders.Include(o => o.Lines).FirstOrDefaultAsync(o => o.Id == request.TargetOrderId && o.CompanyId == companyId, cancellationToken)
+            ?? throw new NotFoundException(nameof(Order), request.TargetOrderId);
+
+        if (source.Status != OrderStatus.Open || target.Status != OrderStatus.Open)
+        {
+            throw new ConflictException("Both orders must be open to merge them.");
+        }
+
+        // Re-parent the lines rather than copying them, so each line's KOT history
+        // (and any PreparationTicketLine referencing it) stays intact.
+        foreach (var line in source.Lines.ToList())
+        {
+            line.OrderId = target.Id;
+        }
+
+        source.Status = OrderStatus.Cancelled;
+
+        if (source.TableSessionId.HasValue)
+        {
+            var session = await _db.TableSessions.FirstAsync(s => s.Id == source.TableSessionId.Value, cancellationToken);
+            session.Status = TableSessionStatus.Closed;
+            session.ClosedAtUtc = DateTime.UtcNow;
+
+            var table = await _db.DiningTables.FirstAsync(t => t.Id == session.TableId, cancellationToken);
+            table.Status = TableStatus.Available;
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return await GetOrderAsync(companyId, target.Id, cancellationToken);
+    }
+
+    public async Task<OrderDto> SplitOrderAsync(long companyId, long branchId, long orderId, long userId, SplitOrderRequest request, CancellationToken cancellationToken = default)
+    {
+        if (request.OrderLineIds.Count == 0)
+        {
+            throw new ConflictException("At least one line must be selected to split off.");
+        }
+
+        var source = await _db.Orders.Include(o => o.Lines).FirstOrDefaultAsync(o => o.Id == orderId && o.CompanyId == companyId, cancellationToken)
+            ?? throw new NotFoundException(nameof(Order), orderId);
+
+        if (source.Status != OrderStatus.Open)
+        {
+            throw new ConflictException($"Order {orderId} is not open and cannot be split.");
+        }
+
+        var linesToMove = source.Lines.Where(l => request.OrderLineIds.Contains(l.Id)).ToList();
+        if (linesToMove.Count != request.OrderLineIds.Count)
+        {
+            throw new NotFoundException("OrderLine", string.Join(",", request.OrderLineIds));
+        }
+        if (linesToMove.Count == source.Lines.Count)
+        {
+            throw new ConflictException("Cannot split every line off an order — use table transfer instead if the whole order is moving.");
+        }
+
+        var newTable = await _db.DiningTables.FirstOrDefaultAsync(t => t.Id == request.NewTableId && t.CompanyId == companyId, cancellationToken)
+            ?? throw new NotFoundException(nameof(DiningTable), request.NewTableId);
+        if (newTable.Status != TableStatus.Available)
+        {
+            throw new ConflictException($"Table '{newTable.Name}' is not available ({newTable.Status}).");
+        }
+
+        var newSession = new TableSession
+        {
+            CompanyId = companyId,
+            BranchId = branchId,
+            TableId = newTable.Id,
+            WaiterUserId = userId,
+            Status = TableSessionStatus.Open,
+            OpenedAtUtc = DateTime.UtcNow,
+        };
+        _db.TableSessions.Add(newSession);
+        newTable.Status = TableStatus.Occupied;
+
+        var newOrder = new Order
+        {
+            CompanyId = companyId,
+            BranchId = branchId,
+            OrderType = source.OrderType,
+            Status = OrderStatus.Open,
+            CreatedByUserId = userId,
+            CreatedAtUtc = DateTime.UtcNow,
+        };
+        _db.Orders.Add(newOrder);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        newOrder.TableSessionId = newSession.Id;
+        foreach (var line in linesToMove)
+        {
+            line.OrderId = newOrder.Id;
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return await GetOrderAsync(companyId, newOrder.Id, cancellationToken);
     }
 
     public async Task<OrderDto> GetOrderAsync(long companyId, long orderId, CancellationToken cancellationToken = default)
@@ -263,6 +439,47 @@ public class RestaurantService : IRestaurantService
         return ToTicketDto(ticket, null);
     }
 
+    public async Task<PreparationTicketDto> CancelTicketAsync(long companyId, long branchId, long? terminalId, long userId, long ticketId, CancelTicketRequest request, CancellationToken cancellationToken = default)
+    {
+        await _cancelTicketValidator.ValidateAndThrowAsync(request, cancellationToken);
+
+        var ticket = await _db.PreparationTickets.Include(t => t.Lines)
+            .FirstOrDefaultAsync(t => t.Id == ticketId && t.CompanyId == companyId, cancellationToken)
+            ?? throw new NotFoundException(nameof(PreparationTicket), ticketId);
+
+        if (ticket.Status is TicketStatus.Served or TicketStatus.Cancelled)
+        {
+            throw new ConflictException($"Ticket {ticket.TicketNumber} is already {ticket.Status} and cannot be cancelled.");
+        }
+
+        var previousStatus = ticket.Status;
+        ticket.Status = TicketStatus.Cancelled;
+
+        var orderLineIds = ticket.Lines.Select(l => l.OrderLineId).ToList();
+        var orderLines = await _db.OrderLines.Where(l => orderLineIds.Contains(l.Id)).ToListAsync(cancellationToken);
+        foreach (var line in orderLines)
+        {
+            line.KotStatus = KotLineStatus.Cancelled;
+        }
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            CompanyId = companyId,
+            BranchId = branchId,
+            TerminalId = terminalId,
+            UserId = userId,
+            ActionCode = "Kot.Cancel",
+            EntityType = nameof(PreparationTicket),
+            EntityId = ticket.Id.ToString(),
+            OldValueJson = System.Text.Json.JsonSerializer.Serialize(new { Status = previousStatus.ToString() }),
+            NewValueJson = System.Text.Json.JsonSerializer.Serialize(new { Status = nameof(TicketStatus.Cancelled), request.Reason }),
+            CreatedAtUtc = DateTime.UtcNow,
+        });
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return ToTicketDto(ticket, null);
+    }
+
     public async Task<SaleReceiptDto> BillOrderAsync(long companyId, long branchId, long cashierUserId, long orderId, BillOrderRequest request, CancellationToken cancellationToken = default)
     {
         var order = await _db.Orders.Include(o => o.Lines).FirstOrDefaultAsync(o => o.Id == orderId && o.CompanyId == companyId, cancellationToken)
@@ -312,6 +529,9 @@ public class RestaurantService : IRestaurantService
         OrderType = order.OrderType.ToString(),
         Status = order.Status.ToString(),
         CreatedAtUtc = order.CreatedAtUtc,
+        ContactPhone = order.ContactPhone,
+        DeliveryAddress = order.DeliveryAddress,
+        DeliveryFee = order.DeliveryFee,
         Lines = order.Lines.Select(l => new OrderLineDto
         {
             Id = l.Id,

@@ -185,7 +185,23 @@ public static class DbSeeder
             new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T1", Capacity = 2 },
             new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T2", Capacity = 4 },
             new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T3", Capacity = 4 },
-            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T4", Capacity = 6 });
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T4", Capacity = 6 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T5", Capacity = 2 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T6", Capacity = 4 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T7", Capacity = 4 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T8", Capacity = 6 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T9", Capacity = 2 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T10", Capacity = 4 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T11", Capacity = 4 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T12", Capacity = 6 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T13", Capacity = 2 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T14", Capacity = 4 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T15", Capacity = 4 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T16", Capacity = 6 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T17", Capacity = 2 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T18", Capacity = 4 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T19", Capacity = 4 },
+            new DiningTable { CompanyId = company.Id, BranchId = colomboBranch.Id, FloorId = groundFloor.Id, Name = "T20", Capacity = 6 });
         await db.SaveChangesAsync();
     }
 

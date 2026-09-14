@@ -38,6 +38,10 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
 {
     public void Configure(EntityTypeBuilder<Order> builder)
     {
+        builder.Property(o => o.ContactPhone).HasMaxLength(30);
+        builder.Property(o => o.DeliveryAddress).HasMaxLength(300);
+        builder.Property(o => o.DeliveryFee).HasPrecision(18, 2);
+
         builder.HasMany(o => o.Lines)
             .WithOne(l => l.Order)
             .HasForeignKey(l => l.OrderId)
@@ -55,6 +59,7 @@ public class OrderLineConfiguration : IEntityTypeConfiguration<OrderLine>
         builder.Property(l => l.Notes).HasMaxLength(300);
     }
 }
+
 
 public class KitchenStationConfiguration : IEntityTypeConfiguration<KitchenStation>
 {

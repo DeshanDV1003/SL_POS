@@ -36,5 +36,10 @@ public class Order
     /// <summary>Set once billed, linking to the SaleHeader created at checkout.</summary>
     public long? SaleHeaderId { get; set; }
 
+    // Populated only when OrderType is Takeaway or Delivery.
+    public string? ContactPhone { get; set; }
+    public string? DeliveryAddress { get; set; }
+    public decimal? DeliveryFee { get; set; }
+
     public ICollection<OrderLine> Lines { get; set; } = new List<OrderLine>();
 }

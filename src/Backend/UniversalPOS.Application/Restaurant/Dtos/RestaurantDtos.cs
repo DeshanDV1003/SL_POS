@@ -37,7 +37,39 @@ public class OrderDto
     public string OrderType { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public DateTime CreatedAtUtc { get; set; }
+    public string? ContactPhone { get; set; }
+    public string? DeliveryAddress { get; set; }
+    public decimal? DeliveryFee { get; set; }
     public List<OrderLineDto> Lines { get; set; } = new();
+}
+
+public class CreateStandaloneOrderRequest
+{
+    public OrderType OrderType { get; set; } = OrderType.Takeaway;
+    public string? ContactPhone { get; set; }
+    public string? DeliveryAddress { get; set; }
+    public decimal? DeliveryFee { get; set; }
+}
+
+public class TransferTableRequest
+{
+    public long NewTableId { get; set; }
+}
+
+public class MergeOrdersRequest
+{
+    public long TargetOrderId { get; set; }
+}
+
+public class SplitOrderRequest
+{
+    public long NewTableId { get; set; }
+    public List<long> OrderLineIds { get; set; } = new();
+}
+
+public class CancelTicketRequest
+{
+    public string Reason { get; set; } = string.Empty;
 }
 
 public class AddOrderLineRequest

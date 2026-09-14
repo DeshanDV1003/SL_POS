@@ -1,17 +1,20 @@
 # Universal POS — Project State
 
-Last updated: 2026-09-13, after rounding out Phase 6's gaps (price override,
-refunds, receipt/tax-invoice rendering).
+Last updated: 2026-09-14, after rounding out Phase 7's gaps (table merge/split/
+transfer, KOT/BOT cancellation, delivery/takeaway details).
 
 ## Current Phase
-Phase 6 is now functionally complete: checkout supports a permission-gated price
-override (with a hard MinSellingPrice floor that not even the override permission can
-cross), a refund is a genuinely distinct document from a void (partial-quantity
-refunds, cross-refund over-quantity tracking, payment-total matching, the original
-sale never mutated), and receipts render as real formatted text in both a simplified
-mode and the IRD-mandated full-tax-invoice mode. Phases 5, 7, 8, 9, 10 all have
-documented gaps (see Known Gaps). Awaiting go-ahead for the next round of
-gap-filling or the next new phase.
+Phase 7 is now functionally complete: a table can be transferred to another table
+(verified: old table freed, new table occupied, order follows), two open orders can
+be merged (verified: lines re-parented, source table freed, source order marked
+Cancelled without deleting its history), an order can be split across a subset of its
+lines onto a new table (verified: remaining lines stay on the original order, moved
+lines appear on the new one), standalone Takeaway/Delivery orders can be created
+without a physical table (Delivery requires an address), and a KOT/BOT ticket can be
+cancelled with a reason that writes a real audit log entry (verified directly in the
+database) — the `restaurant.kot.cancel` permission finally has an action behind it.
+Phases 5, 6, 8, 9, 10 all have documented gaps (see Known Gaps). Awaiting go-ahead for
+the next round of gap-filling.
 
 ## Repository
 This project is now connected to a GitHub remote: `origin` ->
@@ -205,6 +208,27 @@ session out of auto mode.
   button on the post-sale screen that fetches and displays the real rendered text.
   55 integration tests + 17 unit tests, all passing.
 
+- **Phase 7 gap-fill — table merge/split/transfer, KOT/BOT cancellation, delivery
+  details**: `TransferTableAsync` moves a TableSession to a new table, freeing the
+  old one — verified directly. `MergeOrdersAsync` re-parents OrderLines (not copies —
+  each line's KOT ticket history stays attached) into a target order and marks the
+  source Cancelled, freeing its table. `SplitOrderAsync` opens a fresh TableSession
+  on a chosen table and moves only the selected OrderLines there, leaving the rest on
+  the original order — verified both sides end up with exactly the right lines.
+  `CreateStandaloneOrderAsync` supports Takeaway/Delivery orders with no physical
+  table, and Delivery requires an address (verified: 400 without one).
+  `CancelTicketAsync` requires `restaurant.kot.cancel`, marks the ticket and its
+  OrderLines Cancelled, and writes a real AuditLog row (`Kot.Cancel`) — verified
+  directly in the database, not just via the API response — a second cancel attempt
+  on the same ticket is rejected (409).
+  61 integration tests + 17 unit tests, all passing.
+
+  One real test-design bug found via testing (not a production bug): Ceylon Spice's
+  seeded 4 dining tables were exhausted once enough restaurant tests ran in the same
+  collection-shared database, causing later tests to fail finding an "Available"
+  table with "Sequence contains no matching element." Fixed by seeding 20 tables — a
+  more realistic count for an actual restaurant anyway, not just a test workaround.
+
 ## Solution Layout
 ```
 UniversalPOS.slnx
@@ -260,14 +284,15 @@ custom refund line (e.g. issuing store credit unrelated to any original line) is
 supported. `ApprovalRequest` table still has nothing writing to it — Sale
 void/refund use direct permission checks, not the approval-request workflow.
 
-**Within Phase 7, explicitly deferred:** table merge/split/transfer (TableSession
-exists as a 1:1 with an Order; the "relink Order<->Table" mechanism the architecture
-doc describes for merge/split isn't implemented), delayed-ticket visual highlighting
-in the KDS, KOT/BOT cancellation with a reason and audit trail (`KotCancel`
-permission exists, nothing calls it), delivery/takeaway-specific fields (address,
-delivery zone/fee — `OrderType` distinguishes them but Takeaway/Delivery orders have
-no extra data captured), and printed KOT/BOT tickets (a real kitchen would print
-these, not just show them on a KDS screen).
+**Within Phase 7, still remaining after the gap-fill:** delayed-ticket visual
+highlighting in the KDS (elapsed time isn't computed or flagged), a delivery
+zone/driver-assignment model (`DeliveryFee` is a flat manually-entered amount, not
+computed from a zone table; there's no driver/rider assignment or delivery-status
+tracking beyond the Order's own status), and printed KOT/BOT tickets (a real kitchen
+would print these — the Phase 6 `IReceiptRenderer` pattern could extend to tickets,
+but hasn't yet). No frontend UI was added for transfer/merge/split/standalone-order/
+ticket-cancel — real, tested APIs without a screen, same tradeoff as Phase 5's
+gap-fill.
 
 **Within Phase 8, explicitly deferred:** a shift is not mandatory to complete a sale
 (checkout works with or without one open — a real deployment likely wants to require
@@ -311,9 +336,8 @@ real fiscal/e-invoice provider, real payment gateway integration, and the Phase
   business logic, because Sri Lanka's e-invoicing rollout is an active 2026 program.
 
 ## Next Task
-Phase 5 and Phase 6 gap-fills are done. Ask the user which to do next: (a) round out
-Phase 7 gaps (table merge/split/transfer, KOT/BOT cancellation, delivery/takeaway
-details), (b) round out Phase 8 gaps (mandatory shift-to-sell, configurable
-business-day cutoff), (c) round out Phase 9 gaps (pay-with-points at checkout, points
-expiry job, coupon codes), (d) round out Phase 10 gaps (trend charts, exports,
-kitchen-performance reports), or (e) start Phase 11 (Offline + Synchronization).
+Phase 5, 6, and 7 gap-fills are done. The user has asked for 8, 9, and 10 gap-fill
+next, in that order: (a) Phase 8 (mandatory shift-to-sell, configurable business-day
+cutoff), (b) Phase 9 (pay-with-points at checkout, points expiry job, coupon codes),
+(c) Phase 10 (trend charts, exports, kitchen-performance reports). After that, Phase
+11 (Offline + Synchronization) is the next new phase.
