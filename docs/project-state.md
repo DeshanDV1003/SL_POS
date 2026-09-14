@@ -1,19 +1,18 @@
 # Universal POS — Project State
 
-Last updated: 2026-09-14, after Phase 11 (Offline + Synchronization, backend layer).
+Last updated: 2026-09-14, after Phase 12 (Hardware Abstraction, software-only pieces).
 
 ## Current Phase
-Phases 0–10 are complete, including gap-fills for Phases 5, 6, 7, 8, 9, and 10 (see
-Completed Modules below for each). Phase 11 (Offline + Synchronization) is now done
-for its backend layer, scoped deliberately: the user chose "backend-only this pass"
-over also building a frontend IndexedDB/service-worker offline queue, since the
-backend reconciliation layer is fully curl/test-verifiable the way every prior phase
-has been, while frontend offline behavior needs a real browser to verify with the
-same rigor. `SaleHeader.IsOfflineSync`/`ClientCreatedAtUtc`, a real
-`StockReconciliationFlag` workflow for offline-sync oversells, and a terminal
-heartbeat endpoint are built and verified — see the Phase 11 entry below. The
-frontend offline queue itself remains unbuilt; that's the next thing to pick up if
-this phase continues.
+Phases 0–11 are complete (Phase 11 across both its backend and frontend layers — see
+Completed Modules). Phase 12 (Hardware Abstraction) is now done for the pieces that
+can be built as real, verifiable software with no physical hardware attached: the
+user explicitly chose that scope over stubbing out untestable printer/drawer/scale
+I/O, given six device types split cleanly into "buildable and testable today" vs.
+"needs real hardware to mean anything." A KOT/BOT ticket text renderer (backend,
+curl/integration-tested) and a customer-facing display (frontend, a second browser
+window synced via BroadcastChannel) are built. Printer/cash-drawer/scale hardware
+I/O (WebUSB/serial ESC-POS, a USB drawer kick) remains explicitly unbuilt — see the
+Phase 12 entry below for why.
 
 ## Repository
 This project is now connected to a GitHub remote: `origin` ->
@@ -375,6 +374,51 @@ session out of auto mode.
   sale (expect the "Sale Saved Offline" screen), go back online, and confirm the
   sale appears server-side with a real invoice number.
 
+- **Phase 12 — Hardware Abstraction (software-only pieces)**: scoped explicitly with
+  the user — of the six device types in docs/architecture.md §11 (receipt printer,
+  kitchen printer, cash drawer, barcode scanner, customer display, scale), only the
+  ones buildable and verifiable as real software without physical hardware were
+  built this pass.
+  - **KOT/BOT ticket renderer** (`IKotTicketRenderer`/`KotTicketRenderer`, backend):
+    mirrors the Phase 6 `IReceiptRenderer` pattern exactly, rendering a
+    `PreparationTicket` as plain text sized for a narrower (58mm/32-char) kitchen
+    printer — station name and "KITCHEN ORDER TICKET" vs. "BAR ORDER TICKET"
+    (by `KitchenStation.Category`), table name for a dine-in order or order
+    type/phone for a standalone Takeaway/Delivery order, each line's quantity/name/
+    notes. Exposed at `GET /branches/{id}/tickets/{id}/print`, no special
+    permission (any authenticated staff member can view a ticket, same as a
+    receipt). This fills the gap explicitly left open at the end of Phase 7's
+    gap-fill ("printed KOT/BOT tickets... hasn't yet"). Verified end-to-end via
+    curl for all three cases (dine-in/kitchen, dine-in/bar, standalone takeaway)
+    plus a 404 for an unknown ticket; 4 new integration tests (99 total + 17 unit,
+    all passing).
+  - **Customer-facing display** (`ICustomerDisplay`, frontend): a genuinely
+    hardware-free implementation — a customer-facing monitor just runs a second
+    browser window of the same origin (`window.open('/customer-display', ...)`
+    from a new "Open Customer Display" button on `CheckoutPage`), and the two
+    windows talk over `BroadcastChannel` (a standard, no-dependency browser API),
+    with no server round-trip. Shows the live cart (product/qty/line total,
+    running total) while shopping, then a "Thank you" + grand total/change-due
+    screen after checkout. One real bug caught and fixed before it shipped: the
+    existing cart-changed broadcast effect would immediately overwrite the
+    "Thank you" message with an empty "shopping" screen the instant `setCart([])`
+    ran after checkout — fixed with a `customerDisplayShowingReceipt` flag that
+    suppresses that effect until the cashier clicks New Sale.
+  - **Barcode scanner**: confirmed already working, no new code needed — the
+    existing scan-to-search input on `CheckoutPage` already accepts any
+    keyboard-wedge barcode scanner (the overwhelming majority of retail/restaurant
+    scanners), since those emulate a keyboard and just "type" the barcode followed
+    by Enter.
+  - **Explicitly not built, and why:** ESC/POS printing over WebUSB/serial for a
+    real receipt/kitchen printer, a USB cash-drawer kick command, and any scale
+    integration. All three need actual hardware plugged in for the code to mean
+    anything — without it, "implementing" them would be unverified guesswork
+    dressed up as done, which this project's own discipline (verify every phase
+    end-to-end before calling it finished) rules out. The existing `window.print()`
+    receipt/ticket flows and the audited-but-hardware-free
+    `POST /cash-drawer/open` endpoint (Phase 8) remain the real, honest state of
+    those two until real devices are available to build and test against.
+
 ## Solution Layout
 ```
 UniversalPOS.slnx
@@ -486,9 +530,16 @@ listed as offline-capable in docs/architecture.md §10 but weren't wired into th
 queue. Cross-branch stock transfer approval and catalog/price sync remain
 online-required by design (§10), not offline-capable gaps.
 
-**Everything after Phase 11:** Hardware abstraction implementations (`IReceiptPrinter`,
-`IKitchenPrinter`, `ICashDrawer`, `IBarcodeScanner`, `ICustomerDisplay`, `IScale`),
-real fiscal/e-invoice provider, and real payment gateway integration.
+**Within Phase 12, explicitly deferred until real hardware is available:** ESC/POS
+printing over WebUSB/serial (`IReceiptPrinter`/`IKitchenPrinter`), a USB cash-drawer
+kick command (`ICashDrawer` — the audited API trigger from Phase 8 exists, the
+actual hardware signal doesn't), and any `IScale` integration. Also not verified:
+the customer display and the KDS "Print" button (both wired into the UI, both
+build/typecheck/lint clean) haven't been exercised in a real browser — same
+browser-verification limitation as Phase 11's frontend layer, see that entry.
+
+**Everything after Phase 12:** real fiscal/e-invoice provider, and real payment
+gateway integration.
 
 ## Architecture Decisions Locked In (see docs/architecture.md for full rationale)
 - Modular monolith, not microservices.
@@ -500,11 +551,11 @@ real fiscal/e-invoice provider, and real payment gateway integration.
   business logic, because Sri Lanka's e-invoicing rollout is an active 2026 program.
 
 ## Next Task
-Phase 11 is now done on both layers (backend: offline-sync sale metadata,
-stock-reconciliation flags, terminal heartbeat; frontend: IndexedDB offline queue,
-background sync manager, service worker app-shell caching, wired into
-CheckoutPage). The user should manually verify the browser-side offline behavior
-(see the Completed Modules entry above for the exact steps) before treating it as
-fully proven. After that, Phase 12 (Hardware Abstraction) is next per
-docs/architecture.md §11, or extending the offline queue to KOT/BOT and held-bill
-flows per the still-remaining gaps above.
+Phase 12's software-only pieces are done (KOT/BOT ticket renderer, customer-facing
+display, confirmed barcode-scanner compatibility). The user should manually verify
+both this and Phase 11's frontend layer in a real browser (see each Completed
+Modules entry above for exact steps) before treating either as fully proven.
+Remaining hardware-dependent work (real ESC/POS printing, a cash-drawer kick, a
+scale) needs physical devices to build against and isn't actionable until then.
+Otherwise: extend the Phase 11 offline queue to KOT/BOT and held-bill flows, or
+move to the real fiscal/e-invoice provider or payment gateway integration.

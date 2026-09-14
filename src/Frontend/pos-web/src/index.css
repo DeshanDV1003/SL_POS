@@ -328,6 +328,17 @@ body {
   padding-top: 0.6rem;
 }
 
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1rem;
+}
+
 .printed-receipt {
   font-family: 'Courier New', monospace;
   font-size: 0.85rem;
@@ -522,4 +533,63 @@ body {
   background: transparent;
   cursor: pointer;
   font-size: 0.85rem;
+}
+
+.customer-display {
+  min-height: 100vh;
+  background: var(--color-primary-dark);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  padding: 2.5rem;
+  font-size: 1.4rem;
+}
+
+.customer-display-idle {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.customer-display-branch {
+  opacity: 0.8;
+  font-weight: 400;
+}
+
+.customer-display-lines {
+  flex: 1;
+  overflow-y: auto;
+  margin: 1.5rem 0;
+}
+
+.customer-display-lines li {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.customer-display-empty {
+  opacity: 0.7;
+}
+
+.customer-display-total-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 2.2rem;
+  font-weight: 700;
+  border-top: 2px solid rgba(255, 255, 255, 0.3);
+  padding-top: 1rem;
+}
+
+.customer-display-total {
+  font-size: 3rem;
+  font-weight: 700;
+  margin-top: 1rem;
+}
+
+.customer-display-change {
+  font-size: 1.6rem;
+  margin-top: 0.5rem;
+  opacity: 0.85;
 }

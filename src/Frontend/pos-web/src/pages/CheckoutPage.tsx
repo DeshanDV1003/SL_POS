@@ -6,6 +6,7 @@ import { getTerminals, recordTerminalHeartbeat } from '../api/organization';
 import { checkout, deleteHeldBill, getHeldBills, getReceiptText, holdBill, recallBill, type HeldBillDto, type SaleReceipt } from '../api/sales';
 import { OfflineStatusBadge } from '../components/OfflineStatusBadge';
 import { useAuth } from '../context/AuthContext';
+import { createCustomerDisplayChannel } from '../customerDisplay/channel';
 import { enqueueOfflineSale } from '../offline/offlineSalesQueue';
 import { offlineSyncManager } from '../offline/syncManager';
 
@@ -39,7 +40,15 @@ export function CheckoutPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [heldBills, setHeldBills] = useState<HeldBillDto[]>([]);
   const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
+  const [customerDisplayShowingReceipt, setCustomerDisplayShowingReceipt] = useState(false);
   const scanInputRef = useRef<HTMLInputElement>(null);
+  const customerDisplayChannelRef = useRef<BroadcastChannel | null>(null);
+
+  useEffect(() => {
+    const channel = createCustomerDisplayChannel();
+    customerDisplayChannelRef.current = channel;
+    return () => channel.close();
+  }, []);
 
   useEffect(() => {
     if (!branchId) return;
@@ -69,6 +78,27 @@ export function CheckoutPage() {
   const discountTotal = cart.reduce((sum, l) => sum + l.product.sellingPrice * l.quantity * (l.discountPercentage / 100), 0);
   // Server computes the authoritative tax/total; this is an estimate shown before checkout.
   const estimatedTotal = Math.round((subTotal - discountTotal) * 100) / 100;
+
+  // Mirrors the live cart to a customer-facing display window, if one is open —
+  // see src/customerDisplay/ and docs/architecture.md §11 (ICustomerDisplay).
+  // Suppressed right after a checkout completes: setCart([]) fires this same
+  // effect with an empty cart, which would otherwise immediately overwrite the
+  // "Thank you" / change-due message with a blank "shopping" screen before the
+  // cashier ever gets to New Sale.
+  useEffect(() => {
+    if (customerDisplayShowingReceipt) return;
+    customerDisplayChannelRef.current?.postMessage({
+      status: 'shopping',
+      lines: cart.map((l) => ({ productName: l.product.name, quantity: l.quantity, lineTotal: l.product.sellingPrice * l.quantity * (1 - l.discountPercentage / 100) })),
+      subTotal,
+      discountTotal,
+      estimatedTotal,
+    });
+  }, [cart, subTotal, discountTotal, estimatedTotal, customerDisplayShowingReceipt]);
+
+  function openCustomerDisplay() {
+    window.open('/customer-display', 'universalpos-customer-display', 'width=480,height=760');
+  }
 
   function addProductToCart(product: ProductSummary) {
     setCart((prev) => {
@@ -141,6 +171,16 @@ export function CheckoutPage() {
       setReceipt(result);
       setCart([]);
       setCashTendered('');
+      setCustomerDisplayShowingReceipt(true);
+      customerDisplayChannelRef.current?.postMessage({
+        status: 'completed',
+        lines: [],
+        subTotal: 0,
+        discountTotal: 0,
+        estimatedTotal: 0,
+        completedGrandTotal: result.grandTotal,
+        completedChangeDue: result.changeDue,
+      });
     } catch (err) {
       if (isNetworkFailure(err)) {
         await queueOffline(branchId, saleRequest);
@@ -252,7 +292,7 @@ export function CheckoutPage() {
           {printedReceipt && (
             <button onClick={() => window.print()} className="hold-button">Print</button>
           )}
-          <button onClick={() => { setReceipt(null); setPrintedReceipt(null); }} className="checkout-button">New Sale</button>
+          <button onClick={() => { setReceipt(null); setPrintedReceipt(null); setCustomerDisplayShowingReceipt(false); }} className="checkout-button">New Sale</button>
         </div>
       </div>
     );
@@ -263,7 +303,10 @@ export function CheckoutPage() {
       <div className="pos-main">
         <header className="dashboard-header">
           <h1>Checkout</h1>
-          <Link to="/">Back to dashboard</Link>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <button onClick={openCustomerDisplay} className="hold-button">Open Customer Display</button>
+            <Link to="/">Back to dashboard</Link>
+          </div>
         </header>
 
         <OfflineStatusBadge />

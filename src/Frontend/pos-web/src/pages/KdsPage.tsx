@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getKdsTickets, getKitchenStations, updateTicketStatus, type KitchenStationInfo, type TicketInfo } from '../api/restaurant';
+import { getKdsTickets, getKitchenStations, getTicketPrintPayload, updateTicketStatus, type KitchenStationInfo, type TicketInfo } from '../api/restaurant';
 import { useAuth } from '../context/AuthContext';
 
 const nextStatus: Record<string, string | null> = {
@@ -18,6 +18,7 @@ export function KdsPage() {
   const [stationId, setStationId] = useState<number | null>(null);
   const [tickets, setTickets] = useState<TicketInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [printPreview, setPrintPreview] = useState<{ ticketId: number; text: string } | null>(null);
 
   useEffect(() => {
     if (branchId) getKitchenStations(branchId).then((s) => { setStations(s); if (s.length > 0) setStationId(s[0].id); });
@@ -40,6 +41,16 @@ export function KdsPage() {
       refresh();
     } catch {
       setError('Could not update ticket status.');
+    }
+  }
+
+  async function handlePrint(ticketId: number) {
+    if (!branchId) return;
+    try {
+      const text = await getTicketPrintPayload(branchId, ticketId);
+      setPrintPreview({ ticketId, text });
+    } catch {
+      setError('Could not load the ticket print payload.');
     }
   }
 
@@ -80,6 +91,7 @@ export function KdsPage() {
             </ul>
             <div className="kds-card-footer">
               <span className={`badge-warning`}>{ticket.status}</span>
+              <button onClick={() => handlePrint(ticket.id)} className="hold-button">Print</button>
               {nextStatus[ticket.status] && (
                 <button onClick={() => handleAdvance(ticket.id, ticket.status)} className="hold-button">
                   Mark {nextStatus[ticket.status]}
@@ -90,6 +102,16 @@ export function KdsPage() {
         ))}
         {tickets.length === 0 && <p>No active tickets for this station.</p>}
       </div>
+
+      {printPreview && (
+        <div className="modal-overlay" onClick={() => setPrintPreview(null)}>
+          <div className="receipt-card" onClick={(e) => e.stopPropagation()}>
+            <pre className="printed-receipt">{printPreview.text}</pre>
+            <button onClick={() => window.print()} className="hold-button">Print</button>
+            <button onClick={() => setPrintPreview(null)} className="checkout-button">Close</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

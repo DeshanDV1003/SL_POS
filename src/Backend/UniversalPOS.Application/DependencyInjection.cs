@@ -31,6 +31,7 @@ public static class DependencyInjection
         services.AddScoped<ISalesService, SalesService>();
         services.AddScoped<IReceiptRenderer, ReceiptRenderer>();
         services.AddScoped<IRestaurantService, RestaurantService>();
+        services.AddScoped<IKotTicketRenderer, KotTicketRenderer>();
         services.AddScoped<ICashService, CashService>();
         services.AddScoped<IReportingService, ReportingService>();
         return services;

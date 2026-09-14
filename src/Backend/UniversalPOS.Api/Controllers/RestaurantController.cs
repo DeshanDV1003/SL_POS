@@ -15,11 +15,13 @@ namespace UniversalPOS.Api.Controllers;
 public class RestaurantController : ControllerBase
 {
     private readonly IRestaurantService _restaurantService;
+    private readonly IKotTicketRenderer _kotTicketRenderer;
     private readonly ICurrentUserService _currentUser;
 
-    public RestaurantController(IRestaurantService restaurantService, ICurrentUserService currentUser)
+    public RestaurantController(IRestaurantService restaurantService, IKotTicketRenderer kotTicketRenderer, ICurrentUserService currentUser)
     {
         _restaurantService = restaurantService;
+        _kotTicketRenderer = kotTicketRenderer;
         _currentUser = currentUser;
     }
 
@@ -98,6 +100,14 @@ public class RestaurantController : ControllerBase
     [RequirePermission(PermissionCodes.KotCancel)]
     public async Task<IActionResult> CancelTicket(long branchId, long ticketId, [FromBody] CancelTicketRequest request, CancellationToken cancellationToken)
         => Ok(await _restaurantService.CancelTicketAsync(_currentUser.CompanyId, branchId, _currentUser.TerminalId, RequireUserId(), ticketId, request, cancellationToken));
+
+    /// <summary>The formatted text payload a kitchen/bar print adapter sends verbatim — see docs/architecture.md §11.</summary>
+    [HttpGet("tickets/{ticketId:long}/print")]
+    public async Task<IActionResult> GetTicketPrintPayload(long branchId, long ticketId, CancellationToken cancellationToken)
+    {
+        var text = await _kotTicketRenderer.RenderAsync(_currentUser.CompanyId, ticketId, cancellationToken);
+        return Content(text, "text/plain");
+    }
 
     private long RequireUserId() => _currentUser.UserId ?? throw new ForbiddenException("No authenticated user context.");
 }

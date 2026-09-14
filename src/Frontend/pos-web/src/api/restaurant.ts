@@ -1,4 +1,4 @@
-import { apiFetch } from './client';
+import { apiFetch, apiFetchText } from './client';
 import type { SalePaymentRequest } from './sales';
 
 export interface TableInfo {
@@ -103,4 +103,9 @@ export function updateTicketStatus(branchId: number, ticketId: number, status: s
     method: 'POST',
     body: JSON.stringify({ status }),
   });
+}
+
+/** The formatted plain-text payload a kitchen/bar print adapter would send verbatim — see docs/architecture.md §11. */
+export function getTicketPrintPayload(branchId: number, ticketId: number): Promise<string> {
+  return apiFetchText(`/api/v1/branches/${branchId}/tickets/${ticketId}/print`);
 }

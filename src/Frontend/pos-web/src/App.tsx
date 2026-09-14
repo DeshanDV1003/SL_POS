@@ -5,6 +5,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { CashPage } from './pages/CashPage';
 import { CheckoutPage } from './pages/CheckoutPage';
+import { CustomerDisplayPage } from './pages/CustomerDisplayPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { FloorPlanPage } from './pages/FloorPlanPage';
 import { KdsPage } from './pages/KdsPage';
@@ -19,6 +20,10 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          {/* Not behind ProtectedRoute: it never calls the API, only listens to a
+              same-origin BroadcastChannel from the cashier's own checkout tab —
+              see src/customerDisplay/channel.ts. */}
+          <Route path="/customer-display" element={<CustomerDisplayPage />} />
           <Route
             path="/"
             element={
