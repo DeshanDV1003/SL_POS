@@ -33,4 +33,17 @@ public class BranchesController : ControllerBase
     [RequirePermission(PermissionCodes.BranchManage)]
     public async Task<IActionResult> UpdateCashSettings(long branchId, [FromBody] UpdateBranchCashSettingsRequest request, CancellationToken cancellationToken)
         => Ok(await _organizationQueryService.UpdateBranchCashSettingsAsync(_currentUser.CompanyId, branchId, request, cancellationToken));
+
+    /// <summary>
+    /// Any authenticated user on the terminal may call this — it just proves the
+    /// terminal is currently online, not a privileged action. A frontend offline
+    /// queue calls this on reconnect (and periodically while connected) so
+    /// Terminal.LastSeenAtUtc reflects reality rather than only the last login.
+    /// </summary>
+    [HttpPost("{branchId:long}/terminals/{terminalId:long}/heartbeat")]
+    public async Task<IActionResult> RecordHeartbeat(long branchId, long terminalId, CancellationToken cancellationToken)
+    {
+        await _organizationQueryService.RecordTerminalHeartbeatAsync(terminalId, cancellationToken);
+        return NoContent();
+    }
 }

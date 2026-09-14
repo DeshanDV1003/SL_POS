@@ -54,6 +54,16 @@ public class SaleHeader
     /// <summary>Deduplicates a retried/offline-synced submission of the same client-originated sale.</summary>
     public string? ClientIdempotencyKey { get; set; }
 
+    /// <summary>True when this sale was taken while the terminal was offline and only reached the server on reconnect — see docs/architecture.md §10.</summary>
+    public bool IsOfflineSync { get; set; }
+
+    /// <summary>
+    /// When the sale actually happened on the terminal, distinct from CompletedAtUtc
+    /// (when the server received/sequenced it) — only meaningful when IsOfflineSync is
+    /// true, since an online sale's client and server times are the same moment.
+    /// </summary>
+    public DateTime? ClientCreatedAtUtc { get; set; }
+
     public DateTime CreatedAtUtc { get; set; }
     public DateTime? CompletedAtUtc { get; set; }
 

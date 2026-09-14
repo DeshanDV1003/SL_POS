@@ -45,3 +45,22 @@ public class StockAdjustmentDto
     public DateTime CreatedAtUtc { get; set; }
     public List<CreateStockAdjustmentLineRequest> Lines { get; set; } = new();
 }
+
+public class StockReconciliationFlagDto
+{
+    public long Id { get; set; }
+    public long ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public long SaleHeaderId { get; set; }
+    public string? SaleInvoiceNumber { get; set; }
+    public decimal ShortfallQuantity { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime? ResolvedAtUtc { get; set; }
+    public string? ResolutionNotes { get; set; }
+}
+
+public class ResolveStockReconciliationFlagRequest
+{
+    public string? ResolutionNotes { get; set; }
+}

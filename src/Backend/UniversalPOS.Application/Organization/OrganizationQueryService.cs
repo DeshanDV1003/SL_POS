@@ -116,6 +116,14 @@ public class OrganizationQueryService : IOrganizationQueryService
         };
     }
 
+    public async Task RecordTerminalHeartbeatAsync(long terminalId, CancellationToken cancellationToken = default)
+    {
+        var terminal = await _db.Terminals.FirstOrDefaultAsync(t => t.Id == terminalId, cancellationToken)
+            ?? throw new NotFoundException("Terminal", terminalId);
+        terminal.LastSeenAtUtc = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<TerminalDto>> GetTerminalsAsync(long branchId, CancellationToken cancellationToken = default)
     {
         return await _db.Terminals

@@ -28,6 +28,11 @@ public class CreateSaleRequestValidator : AbstractValidator<CreateSaleRequest>
             .NotEmpty()
             .When(x => x.InvoiceMode == Domain.Sales.InvoiceMode.FullTaxInvoice)
             .WithMessage("A full tax invoice requires the purchaser's TIN.");
+
+        RuleFor(x => x.ClientIdempotencyKey)
+            .NotEmpty()
+            .When(x => x.IsOfflineSync)
+            .WithMessage("An offline-synced sale must supply a ClientIdempotencyKey, so a retried sync never double-books it.");
     }
 }
 

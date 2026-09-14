@@ -124,6 +124,8 @@ public class SalesService : ISalesService
             PurchaserName = request.PurchaserName,
             PurchaserAddress = request.PurchaserAddress,
             ClientIdempotencyKey = request.ClientIdempotencyKey,
+            IsOfflineSync = request.IsOfflineSync,
+            ClientCreatedAtUtc = request.ClientCreatedAtUtc,
             Status = SaleStatus.Completed,
             CreatedAtUtc = DateTime.UtcNow,
         };
@@ -305,9 +307,27 @@ public class SalesService : ISalesService
 
             foreach (var line in sale.Lines)
             {
-                await _stockService.PostMovementAsync(
+                var resultingQuantity = await _stockService.PostMovementAsync(
                     companyId, branchId, line.ProductId, StockMovementType.Sale, -line.Quantity,
                     nameof(SaleHeader), sale.Id, cashierUserId, cancellationToken);
+
+                // Negative stock is never blocked (see StockService.PostMovementAsync),
+                // but an offline-synced sale driving it negative is exactly the scenario
+                // docs/architecture.md §10 calls out for manager review — a normal
+                // online sale going negative (a rare race, not an offline reconciliation
+                // problem) does not raise one of these.
+                if (request.IsOfflineSync && resultingQuantity < 0)
+                {
+                    _db.StockReconciliationFlags.Add(new Domain.Inventory.StockReconciliationFlag
+                    {
+                        CompanyId = companyId,
+                        BranchId = branchId,
+                        ProductId = line.ProductId,
+                        SaleHeaderId = sale.Id,
+                        ShortfallQuantity = -resultingQuantity,
+                        CreatedAtUtc = DateTime.UtcNow,
+                    });
+                }
             }
 
             var fiscalResult = await _fiscalReportingProvider.TransmitAsync(
@@ -629,6 +649,7 @@ public class SalesService : ISalesService
         ServiceChargeTotal = sale.ServiceChargeTotal,
         CouponDiscountAmount = sale.CouponDiscountAmount,
         GrandTotal = sale.GrandTotal,
+        IsOfflineSync = sale.IsOfflineSync,
         CompletedAtUtc = sale.CompletedAtUtc ?? sale.CreatedAtUtc,
         Lines = sale.Lines.Select(l => new SaleLineDto
         {

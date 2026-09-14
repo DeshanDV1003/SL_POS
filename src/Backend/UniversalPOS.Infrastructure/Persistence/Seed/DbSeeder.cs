@@ -65,6 +65,7 @@ public static class DbSeeder
                 Domain.Identity.PermissionCodes.CashShiftOpen, Domain.Identity.PermissionCodes.DayEndReportFinalize,
                 Domain.Identity.PermissionCodes.LoyaltyAdjust, Domain.Identity.PermissionCodes.PromotionManage,
                 Domain.Identity.PermissionCodes.PurchaseInvoiceCreate, Domain.Identity.PermissionCodes.SupplierPaymentCreate,
+                Domain.Identity.PermissionCodes.StockReconciliationResolve,
             },
             ["Cashier"] = new[]
             {
@@ -92,6 +93,23 @@ public static class DbSeeder
                     role.RolePermissions.Add(new RolePermission { Permission = Perm(code) });
                 }
                 db.Roles.Add(role);
+            }
+            else
+            {
+                // A system role that already exists in the database from an earlier
+                // deployment must still pick up permission codes added to its
+                // definition since then — otherwise a newly introduced permission
+                // (like inventory.reconciliation.resolve) never reaches Manager/Admin
+                // on an existing database, only on a brand-new one.
+                var existingCodes = role.RolePermissions.Select(rp => rp.PermissionId).ToHashSet();
+                foreach (var code in permissionCodes)
+                {
+                    var permission = Perm(code);
+                    if (existingCodes.Add(permission.Id))
+                    {
+                        role.RolePermissions.Add(new RolePermission { Permission = permission });
+                    }
+                }
             }
 
             result[roleName] = role;

@@ -1,20 +1,19 @@
 # Universal POS — Project State
 
-Last updated: 2026-09-14, after rounding out Phase 7's gaps (table merge/split/
-transfer, KOT/BOT cancellation, delivery/takeaway details).
+Last updated: 2026-09-14, after Phase 11 (Offline + Synchronization, backend layer).
 
 ## Current Phase
-Phase 7 is now functionally complete: a table can be transferred to another table
-(verified: old table freed, new table occupied, order follows), two open orders can
-be merged (verified: lines re-parented, source table freed, source order marked
-Cancelled without deleting its history), an order can be split across a subset of its
-lines onto a new table (verified: remaining lines stay on the original order, moved
-lines appear on the new one), standalone Takeaway/Delivery orders can be created
-without a physical table (Delivery requires an address), and a KOT/BOT ticket can be
-cancelled with a reason that writes a real audit log entry (verified directly in the
-database) — the `restaurant.kot.cancel` permission finally has an action behind it.
-Phases 5, 6, 8, 9, 10 all have documented gaps (see Known Gaps). Awaiting go-ahead for
-the next round of gap-filling.
+Phases 0–10 are complete, including gap-fills for Phases 5, 6, 7, 8, 9, and 10 (see
+Completed Modules below for each). Phase 11 (Offline + Synchronization) is now done
+for its backend layer, scoped deliberately: the user chose "backend-only this pass"
+over also building a frontend IndexedDB/service-worker offline queue, since the
+backend reconciliation layer is fully curl/test-verifiable the way every prior phase
+has been, while frontend offline behavior needs a real browser to verify with the
+same rigor. `SaleHeader.IsOfflineSync`/`ClientCreatedAtUtc`, a real
+`StockReconciliationFlag` workflow for offline-sync oversells, and a terminal
+heartbeat endpoint are built and verified — see the Phase 11 entry below. The
+frontend offline queue itself remains unbuilt; that's the next thing to pick up if
+this phase continues.
 
 ## Repository
 This project is now connected to a GitHub remote: `origin` ->
@@ -314,6 +313,43 @@ session out of auto mode.
   "get this out of the system" need without that decision. 88 integration tests + 17
   unit tests, all passing.
 
+- **Phase 11 — Offline + Synchronization (backend layer)**: `CreateSaleRequest.IsOfflineSync`
+  marks a sale as arriving from a terminal's offline queue rather than being taken
+  live; it requires `ClientIdempotencyKey` (validated — a sync retry must never
+  double-book a sale, verified 400 without one) and records `ClientCreatedAtUtc`
+  (when it actually happened) distinct from `CompletedAtUtc` (when the server
+  sequenced it). Negative stock was already never blocked anywhere in this codebase
+  (`StockService.PostMovementAsync`, since Phase 5) — what Phase 11 adds is a real
+  `StockReconciliationFlag` raised specifically when an offline-synced sale drives
+  stock negative, for manager review (`GET`/`POST .../resolve` under
+  `inventory.reconciliation.resolve`) — verified an offline oversell raises exactly
+  one flag with the correct shortfall quantity, a same-day online oversell raises
+  none (documented distinction), and resolving twice is rejected (409). A terminal
+  heartbeat (`POST /branches/{id}/terminals/{id}/heartbeat`) updates
+  `Terminal.LastSeenAtUtc`, previously a schema column nothing ever wrote to — any
+  authenticated user may call it, since it's just "prove you're online," not a
+  privileged action. 95 integration tests + 17 unit tests, all passing.
+
+  One real pre-existing seeding bug found via testing (not introduced by this
+  phase, but only surfaced because it added a new permission code): `DbSeeder`'s
+  role-permission sync only wrote `RolePermissions` for a *newly created* system
+  role — a role that already existed in the database (as every seeded database's
+  Admin/Manager/Cashier do, after the first run) never picked up a permission code
+  added to its definition later. `inventory.reconciliation.resolve` was invisible
+  to `admin.lfm`'s already-issued token on the dev database until this was fixed
+  (existing roles now get diffed against their current definition and missing
+  permissions added). This means every permission added in Phases 8-11
+  (`cash.drawer.open` aside, which predates this) reached brand-new test databases
+  correctly but would have silently never reached a real, already-deployed
+  database — now fixed for all of them going forward.
+
+  **Explicitly out of scope this pass, by the user's choice:** the frontend offline
+  queue itself — IndexedDB-backed local storage of unsynced sales, a service worker,
+  background-sync retry with exponential backoff, and the "held while offline"
+  affordance in the POS UI (all real work, per docs/architecture.md §10) needs a
+  real browser to verify with the same end-to-end rigor as everything above, so it
+  was deliberately deferred rather than built without that proof.
+
 ## Solution Layout
 ```
 UniversalPOS.slnx
@@ -410,9 +446,20 @@ UI yet — real, tested APIs without a screen, same tradeoff as every prior gap-
 Branch-comparison has no chart UI either — it is a real, tested JSON endpoint a chart
 would consume, not a rendered chart.
 
-**Everything after Phase 10:** Offline/sync, Hardware abstraction implementations,
-real fiscal/e-invoice provider, real payment gateway integration, and the Phase
-5/6/7/8/9 gaps listed above.
+**Within Phase 11, explicitly deferred (by the user's own choice this pass):** the
+frontend offline queue — IndexedDB-backed local storage of unsynced sales, a service
+worker, background-sync retry with exponential backoff, and a "syncing.../offline"
+UI affordance. The backend's sync contract (`IsOfflineSync` + mandatory
+`ClientIdempotencyKey` + `ClientCreatedAtUtc`) is ready for that frontend work to
+target. Also still open: `StockReconciliationFlag` has no frontend screen (real,
+tested API without one, same tradeoff as every other gap-fill); cross-branch stock
+transfer approval and catalog/price sync are already online-required by design
+(§10), not offline-capable gaps.
+
+**Everything after Phase 11:** Hardware abstraction implementations (`IReceiptPrinter`,
+`IKitchenPrinter`, `ICashDrawer`, `IBarcodeScanner`, `ICustomerDisplay`, `IScale`),
+real fiscal/e-invoice provider, real payment gateway integration, and the frontend
+offline queue above.
 
 ## Architecture Decisions Locked In (see docs/architecture.md for full rationale)
 - Modular monolith, not microservices.
@@ -424,6 +471,7 @@ real fiscal/e-invoice provider, real payment gateway integration, and the Phase
   business logic, because Sri Lanka's e-invoicing rollout is an active 2026 program.
 
 ## Next Task
-Phase 5, 6, 7, 8, 9, and 10 gap-fills are all done — every phase the user asked to
-gap-fill ("7, 8, 9, or 10 gap-fill") is now complete. Per docs/architecture.md, the
-next new phase is Phase 11 (Offline + Synchronization).
+Phase 11's backend layer is done (offline-sync sale metadata, stock-reconciliation
+flags, terminal heartbeat). Awaiting direction on what's next: the deferred frontend
+offline queue for this same phase, or moving on to Phase 12 (Hardware Abstraction)
+per docs/architecture.md §11.

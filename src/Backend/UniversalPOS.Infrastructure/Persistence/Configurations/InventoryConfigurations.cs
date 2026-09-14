@@ -53,6 +53,17 @@ public class StockAdjustmentConfiguration : IEntityTypeConfiguration<StockAdjust
     }
 }
 
+public class StockReconciliationFlagConfiguration : IEntityTypeConfiguration<StockReconciliationFlag>
+{
+    public void Configure(EntityTypeBuilder<StockReconciliationFlag> builder)
+    {
+        builder.Property(f => f.ShortfallQuantity).HasPrecision(18, 3);
+        builder.Property(f => f.ResolutionNotes).HasMaxLength(500);
+
+        builder.HasIndex(f => new { f.BranchId, f.Status });
+    }
+}
+
 public class StockAdjustmentLineConfiguration : IEntityTypeConfiguration<StockAdjustmentLine>
 {
     public void Configure(EntityTypeBuilder<StockAdjustmentLine> builder)

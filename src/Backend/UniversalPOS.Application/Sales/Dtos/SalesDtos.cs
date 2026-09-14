@@ -29,6 +29,12 @@ public class CreateSaleRequest
     public string? PurchaserAddress { get; set; }
     public string? ClientIdempotencyKey { get; set; }
 
+    /// <summary>True when this sale is arriving from a terminal's offline queue rather than being taken live — see docs/architecture.md §10. Requires ClientIdempotencyKey.</summary>
+    public bool IsOfflineSync { get; set; }
+
+    /// <summary>When the sale actually happened on the terminal, only meaningful (and expected) when IsOfflineSync is true.</summary>
+    public DateTime? ClientCreatedAtUtc { get; set; }
+
     /// <summary>Optional customer-entered coupon code, applied as a flat reduction to GrandTotal. See Domain.Sales.Coupon.</summary>
     public string? CouponCode { get; set; }
     public List<CreateSaleLineRequest> Lines { get; set; } = new();
@@ -66,6 +72,7 @@ public class SaleReceiptDto
     public decimal CouponDiscountAmount { get; set; }
     public decimal GrandTotal { get; set; }
     public decimal ChangeDue { get; set; }
+    public bool IsOfflineSync { get; set; }
     public DateTime CompletedAtUtc { get; set; }
     public List<SaleLineDto> Lines { get; set; } = new();
     public List<SalePaymentDto> Payments { get; set; } = new();

@@ -12,7 +12,8 @@ public interface IStockService
     /// operation (e.g. all lines of one GRN, or a whole sale), so a partial failure
     /// never leaves the ledger and the summary out of sync.
     /// </summary>
-    Task PostMovementAsync(
+    /// <returns>The resulting QuantityOnHand after this movement is applied.</returns>
+    Task<decimal> PostMovementAsync(
         long companyId,
         long branchId,
         long productId,
@@ -24,6 +25,9 @@ public interface IStockService
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<StockOnHandDto>> GetStockOnHandAsync(long companyId, long branchId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<StockReconciliationFlagDto>> GetReconciliationFlagsAsync(long companyId, long branchId, bool openOnly, CancellationToken cancellationToken = default);
+    Task<StockReconciliationFlagDto> ResolveReconciliationFlagAsync(long companyId, long flagId, long resolvedByUserId, ResolveStockReconciliationFlagRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<StockLedgerEntryDto>> GetLedgerAsync(long companyId, long branchId, long productId, CancellationToken cancellationToken = default);
 
     Task<StockAdjustmentDto> CreateAdjustmentAsync(long companyId, long branchId, long requestedByUserId, CreateStockAdjustmentRequest request, CancellationToken cancellationToken = default);

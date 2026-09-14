@@ -100,5 +100,15 @@ public class InventoryController : ControllerBase
     public async Task<IActionResult> CompleteCount(long branchId, long stockCountId, CancellationToken cancellationToken)
         => Ok(await _stockService.CompleteCountAsync(_currentUser.CompanyId, stockCountId, RequireUserId(), cancellationToken));
 
+    [HttpGet("reconciliation-flags")]
+    [RequirePermission(PermissionCodes.StockReconciliationResolve)]
+    public async Task<IActionResult> GetReconciliationFlags(long branchId, [FromQuery] bool openOnly, CancellationToken cancellationToken)
+        => Ok(await _stockService.GetReconciliationFlagsAsync(_currentUser.CompanyId, branchId, openOnly, cancellationToken));
+
+    [HttpPost("reconciliation-flags/{flagId:long}/resolve")]
+    [RequirePermission(PermissionCodes.StockReconciliationResolve)]
+    public async Task<IActionResult> ResolveReconciliationFlag(long branchId, long flagId, [FromBody] ResolveStockReconciliationFlagRequest request, CancellationToken cancellationToken)
+        => Ok(await _stockService.ResolveReconciliationFlagAsync(_currentUser.CompanyId, flagId, RequireUserId(), request, cancellationToken));
+
     private long RequireUserId() => _currentUser.UserId ?? throw new Application.Common.Exceptions.ForbiddenException("No authenticated user context.");
 }

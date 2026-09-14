@@ -26,7 +26,7 @@ public class StockService : IStockService
         _countLineValidator = countLineValidator;
     }
 
-    public async Task PostMovementAsync(
+    public async Task<decimal> PostMovementAsync(
         long companyId,
         long branchId,
         long productId,
@@ -66,11 +66,11 @@ public class StockService : IStockService
                 ProductId = productId,
                 QuantityOnHand = quantityChange,
             });
+            return quantityChange;
         }
-        else
-        {
-            summary.QuantityOnHand += quantityChange;
-        }
+
+        summary.QuantityOnHand += quantityChange;
+        return summary.QuantityOnHand;
     }
 
     public async Task<IReadOnlyList<StockOnHandDto>> GetStockOnHandAsync(long companyId, long branchId, CancellationToken cancellationToken = default)
@@ -432,5 +432,59 @@ public class StockService : IStockService
                 CountedQuantity = l.CountedQuantity,
             }).ToList(),
         };
+    }
+
+    public async Task<IReadOnlyList<StockReconciliationFlagDto>> GetReconciliationFlagsAsync(long companyId, long branchId, bool openOnly, CancellationToken cancellationToken = default)
+    {
+        var query = _db.StockReconciliationFlags.Where(f => f.CompanyId == companyId && f.BranchId == branchId);
+        if (openOnly)
+        {
+            query = query.Where(f => f.Status == StockReconciliationFlagStatus.Open);
+        }
+
+        var flags = await query.OrderByDescending(f => f.CreatedAtUtc).ToListAsync(cancellationToken);
+        return await BuildFlagDtosAsync(flags, cancellationToken);
+    }
+
+    public async Task<StockReconciliationFlagDto> ResolveReconciliationFlagAsync(long companyId, long flagId, long resolvedByUserId, ResolveStockReconciliationFlagRequest request, CancellationToken cancellationToken = default)
+    {
+        var flag = await _db.StockReconciliationFlags.FirstOrDefaultAsync(f => f.Id == flagId && f.CompanyId == companyId, cancellationToken)
+            ?? throw new NotFoundException(nameof(StockReconciliationFlag), flagId);
+
+        if (flag.Status == StockReconciliationFlagStatus.Resolved)
+        {
+            throw new ConflictException("This stock-reconciliation flag has already been resolved.");
+        }
+
+        flag.Status = StockReconciliationFlagStatus.Resolved;
+        flag.ResolvedByUserId = resolvedByUserId;
+        flag.ResolvedAtUtc = DateTime.UtcNow;
+        flag.ResolutionNotes = request.ResolutionNotes;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return (await BuildFlagDtosAsync(new List<StockReconciliationFlag> { flag }, cancellationToken)).Single();
+    }
+
+    private async Task<IReadOnlyList<StockReconciliationFlagDto>> BuildFlagDtosAsync(List<StockReconciliationFlag> flags, CancellationToken cancellationToken)
+    {
+        var productIds = flags.Select(f => f.ProductId).Distinct().ToList();
+        var products = await _db.Products.Where(p => productIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, cancellationToken);
+
+        var saleIds = flags.Select(f => f.SaleHeaderId).Distinct().ToList();
+        var invoiceNumbers = await _db.SaleHeaders.Where(s => saleIds.Contains(s.Id)).ToDictionaryAsync(s => s.Id, s => s.InvoiceNumber, cancellationToken);
+
+        return flags.Select(f => new StockReconciliationFlagDto
+        {
+            Id = f.Id,
+            ProductId = f.ProductId,
+            ProductName = products.TryGetValue(f.ProductId, out var p) ? p.Name : "(unknown)",
+            SaleHeaderId = f.SaleHeaderId,
+            SaleInvoiceNumber = invoiceNumbers.GetValueOrDefault(f.SaleHeaderId),
+            ShortfallQuantity = f.ShortfallQuantity,
+            Status = f.Status.ToString(),
+            CreatedAtUtc = f.CreatedAtUtc,
+            ResolvedAtUtc = f.ResolvedAtUtc,
+            ResolutionNotes = f.ResolutionNotes,
+        }).ToList();
     }
 }

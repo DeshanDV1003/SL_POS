@@ -38,6 +38,7 @@ public static class PermissionCodes
     public const string PurchaseInvoiceCreate = "purchase.invoice.create";
     public const string SupplierPaymentCreate = "purchase.payment.create";
     public const string StockAdjustmentApprove = "inventory.adjust.approve";
+    public const string StockReconciliationResolve = "inventory.reconciliation.resolve";
 
     // CRM
     public const string CustomerManage = "customer.manage";
@@ -88,6 +89,7 @@ public static class PermissionCodes
         (PurchaseInvoiceCreate, "Purchasing", "Record a supplier's invoice"),
         (SupplierPaymentCreate, "Purchasing", "Record a payment to a supplier"),
         (StockAdjustmentApprove, "Inventory", "Approve a pending stock adjustment"),
+        (StockReconciliationResolve, "Inventory", "Review/resolve a stock-reconciliation flag raised by an offline-synced sale"),
         (CustomerManage, "CRM", "Create/edit customers and customer groups"),
         (LoyaltyAdjust, "CRM", "Manually adjust a customer's loyalty point balance"),
         (PromotionManage, "Sales", "Create/edit automatic promotions"),

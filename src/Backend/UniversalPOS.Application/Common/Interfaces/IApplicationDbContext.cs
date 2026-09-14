@@ -62,6 +62,7 @@ public interface IApplicationDbContext
     DbSet<StockOnHand> StockOnHands { get; }
     DbSet<ProductBatch> ProductBatches { get; }
     DbSet<StockAdjustment> StockAdjustments { get; }
+    DbSet<StockReconciliationFlag> StockReconciliationFlags { get; }
     DbSet<StockAdjustmentLine> StockAdjustmentLines { get; }
     DbSet<StockTransfer> StockTransfers { get; }
     DbSet<StockTransferLine> StockTransferLines { get; }

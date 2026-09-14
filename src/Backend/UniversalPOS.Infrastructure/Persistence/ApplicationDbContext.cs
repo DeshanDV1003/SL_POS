@@ -61,6 +61,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<StockOnHand> StockOnHands => Set<StockOnHand>();
     public DbSet<ProductBatch> ProductBatches => Set<ProductBatch>();
     public DbSet<StockAdjustment> StockAdjustments => Set<StockAdjustment>();
+    public DbSet<StockReconciliationFlag> StockReconciliationFlags => Set<StockReconciliationFlag>();
     public DbSet<StockAdjustmentLine> StockAdjustmentLines => Set<StockAdjustmentLine>();
     public DbSet<StockTransfer> StockTransfers => Set<StockTransfer>();
     public DbSet<StockTransferLine> StockTransferLines => Set<StockTransferLine>();
